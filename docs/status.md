@@ -5,3 +5,5 @@ Maintained by the agile plugin. One row per sprint — updated by `/agile:shape`
 | Sprint | Slug | Status | Description |
 |--------|------|--------|-------------|
 | App Foundation and Sign-In | app-foundation-and-sign-in | done | Build scaffold, shared stylesheet and token-based sign-in. |
+| Tasks On Screen | tasks-on-screen | done | Task API client, ordering rules and the grouped task list. |
+| Managing Tasks | managing-tasks | planned | Complete, create, edit, delete, and review completed tasks. |

@@ -247,6 +247,21 @@ Auth: `POST /login` → `{ token }`; `POST /logout` revokes only the token used;
 `POST /forgot-password` and `POST /reset-password` are public and rate-limited. The reset
 page belongs to the client — the server links to `{FRONTEND_URL}/reset-password?token=…&email=…`.
 
+### Due dates are wall-clock, not instants
+
+**Whatever time is registered is the time that is shown.** A `due_at` is a commitment —
+"Friday at 14:30" — not a point on a global timeline. Nothing in the app converts a due date
+between time zones: the calendar and clock fields are read literally off the string by
+`parseDue()` and rebuilt in local time, and any offset the server appends is ignored rather
+than applied.
+
+Never hand a due date to `new Date(string)`. It converts: `'2026-08-30'` becomes UTC midnight
+— the evening of the 29th in the Americas — and `'…T14:30:00Z'` displays as whatever hour the
+viewer's zone makes of it. Both are wrong here.
+
+`completed_at` is different: it is a real instant stamped by the server, and it is only ever
+compared, never re-displayed as a wall-clock promise.
+
 ### Consequences to design around
 
 - **PUT is a full replacement, and omitting `completed_at` reopens the task.** Always build

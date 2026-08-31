@@ -6,6 +6,7 @@ import { join } from 'node:path';
 
 import App from '@/App.vue';
 import { TOKEN_KEY } from '@/stores/session';
+import { useTasksStore } from '@/stores/tasks';
 
 const { replaceMock } = vi.hoisted(() => ({ replaceMock: vi.fn() }));
 vi.mock('vue-router', () => ({
@@ -80,6 +81,19 @@ describe('signing out', () => {
 		localStorage.setItem(TOKEN_KEY, 'a-token');
 
 		expect(mountApp().find('[data-action="sign-out"]').exists()).toBe(true);
+	});
+
+	it('empties the task list, so the next account never sees the last one’s work', async () => {
+		localStorage.setItem(TOKEN_KEY, 'a-token');
+		vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+		const wrapper = mountApp();
+		const tasks = useTasksStore();
+		tasks.tasks = [{ id: '1', title: 'Private thing', notes: null, due_at: null, completed_at: null }];
+
+		await wrapper.find('[data-action="sign-out"]').trigger('click');
+		await flushPromises();
+
+		expect(tasks.tasks).toEqual([]);
 	});
 
 	it('clears the session and returns to login even when the revoke call fails', async () => {

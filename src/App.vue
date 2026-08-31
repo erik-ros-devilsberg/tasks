@@ -2,14 +2,18 @@
 import { useRouter } from 'vue-router';
 
 import { useSessionStore } from '@/stores/session';
+import { useTasksStore } from '@/stores/tasks';
 
 const version = __APP_VERSION__;
 
 const router = useRouter();
 const session = useSessionStore();
+const tasks = useTasksStore();
 
 async function signOut() {
 	await session.logout();
+	// The loaded tasks belong to the account that just left this device.
+	tasks.forget();
 	await router.replace('/login');
 }
 </script>

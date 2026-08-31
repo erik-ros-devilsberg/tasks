@@ -58,6 +58,75 @@ One `api` instance is constructed here with an `onUnauthorized` hook, so a `401`
 server's empty-bodied `429` to an actionable throttle message. **`logout()` clears locally
 even when `POST /logout` fails** — a dead network must not trap a user in a session.
 
+### `lib/tasksRemote.js`
+
+The only module that knows the shape of the task endpoints. `createTasksRemote({ api })`
+returns `listAll`, `get`, `create`, `update`, `replace`, `complete`, `reopen`, `remove`.
+
+It absorbs the server's sharp edges so callers never meet them: `update()` is a `PATCH`, so a
+partial body cannot wipe omitted fields or reopen a completed task; `replace()` is the
+explicit `PUT` that sends a complete record including `completed_at`; `complete()` posts **no
+body at all**; `remove()` treats a `404` as success, because "already gone" is the outcome the
+caller asked for.
+
+`listAll()` accepts either a bare array or a `{ data }` envelope — the server's pagination
+removal could land either way, and tolerating both means the app does not break mid-deploy.
+
+### `lib/taskSort.js`
+
+Ordering and grouping, framework-free. The server sends `due_at` and `completed_at` and
+nothing else — **"overdue" and "today" are decisions this module makes, not fields it reads.**
+
+Open tasks sort soonest-first with undated last and ties broken by title, so the order does
+not shuffle between loads. Completed tasks sort most-recent-first. `groupOpen()` buckets into
+Overdue / Today / Upcoming / No due date and drops empty groups. Sorting always returns a new
+array; sorting in place would mutate store state from under the views.
+
+A date-only task is late only once the *next* day begins — it has all day. A timed task is
+late the moment its time passes.
+
+### Due dates are wall-clock, not instants
+
+**Whatever time is registered is the time that is shown.** A due date is a commitment, not a
+point on a global timeline, so nothing converts it between zones. `parseDue()` reads the
+calendar and clock fields literally off the string and rebuilds them in local time; an offset
+the server appends is ignored rather than applied. `formatDue()` then only decides how to
+print them, and prints a time only when one was registered — "Friday" and "Friday at 14:30"
+are different commitments, and showing a time the user never entered invents precision.
+
+Handing a due date to `new Date(string)` is the bug this exists to prevent: `'2026-08-30'`
+becomes UTC midnight, which renders as the 29th anywhere west of Greenwich.
+
+`completed_at` is the exception — a real instant stamped by the server, only ever compared.
+
+### `stores/tasks.js`
+
+The reactive layer. The remote is **injected** through `useRemote()`, never imported, which is
+what lets view tests hand it a fake.
+
+State: `tasks`, `loading`, `loaded`, `error`, `now`. Derived: `open`, `completed`, `groups`.
+
+- `loading` starts **true** — starting false flashes "no tasks yet" for a frame before the
+  first load resolves.
+- `loaded` distinguishes "this account has no tasks" from "we never got an answer". Without
+  it a failed first load renders an empty state that is a guess.
+- `now` is state, refreshed on every load, rather than a `new Date()` inside the computed.
+  That is what stops the grouping and the per-row overdue marker disagreeing — a row must
+  never carry an "Overdue" badge while sitting under the "Today" heading.
+- A **generation counter** discards responses that have been overtaken. Without it a slow
+  first request landing after a fast second one puts the older list back on screen.
+- **`forget()`** empties everything and is called on sign-out and on a `401`. This device is
+  shared; without it the next person to sign in sees the previous account's tasks rendered
+  from memory until their own load resolves.
+- Writes go through `attempt()`, which reports success **separately** from the returned value
+  — an empty `204` body is a success that otherwise looks identical to a failure. When a write
+  succeeds without a body the store reloads rather than guessing, so a click can never
+  silently do nothing.
+- A failed write leaves the list exactly as it was. A failed `load()` keeps the last known
+  tasks on screen with a warning.
+- A `401` is rethrown by every action rather than folded into `error` — only the session layer
+  can act on it.
+
 ### `router.js`
 
 `authGuard(to)` is pure: it returns `true` to allow or a path to redirect to, so it is tested
@@ -141,3 +210,23 @@ post-login redirect have a real target. 80 tests.
 
 `api.patch()` was added here rather than in a later sprint — stories 07 and 08 both need it,
 and adding it now avoided a second pass over the client.
+
+### Tasks On Screen (2026-08-31)
+
+The full stack from `lib/tasksRemote.js` through `stores/tasks.js` to a grouped, ordered list
+replacing the placeholder view. 176 tests.
+
+A code review ran at the end of this sprint and found six issues, all fixed before wrapping.
+The two that mattered: the store was never cleared when a session ended, so a second user on
+the same browser would see the first user's task titles until their own load resolved; and
+`remove()` captured the task array *before* its await and wrote it back after, silently
+reverting any refresh that landed during the round-trip. The rest — a contradictory empty
+state on a cold failure, a frozen `now` in the grouping computed, `null` meaning both "204"
+and "failed", and unguarded overlapping loads — are covered in the `stores/tasks.js` notes
+above.
+
+The wall-clock rule for due dates was set here, on instruction: whatever time is registered is
+the time that is shown, with no zone conversion in either direction.
+
+One remaining gap, accepted for now: `now` refreshes on load, not on a timer. A tab left open
+past midnight keeps yesterday's tasks under "Today" until the next refresh.

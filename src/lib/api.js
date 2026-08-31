@@ -6,7 +6,16 @@
  * "the server said no" lead to very different messages for the user.
  */
 
-export const API_BASE = '/api/v1';
+/**
+ * Where the API lives, baked in at build time.
+ *
+ * Defaults to a relative path, which is what the dev proxy serves and what a
+ * deployment sharing the server's origin needs. Set `VITE_API_BASE_URL` to an
+ * absolute origin when the API is on a host of its own — the client sends a
+ * bearer token rather than a cookie, so that only needs CORS on the server, not
+ * credentialed requests.
+ */
+export const API_BASE = import.meta.env?.VITE_API_BASE_URL || '/api/v1';
 
 export class ApiError extends Error {
 	constructor(status, message, data = null) {

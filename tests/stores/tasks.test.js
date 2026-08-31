@@ -141,6 +141,28 @@ describe('create', () => {
 	});
 });
 
+describe('a rejected write', () => {
+	it('rethrows a 422 so the form can put the messages against its fields', async () => {
+		const create = vi.fn().mockRejectedValue(failure(422));
+		const { tasks } = store(fakeRemote({ create }));
+
+		await expect(tasks.create({ title: '' })).rejects.toMatchObject({ status: 422 });
+	});
+
+	it('folds any other failure into a message, leaving the list untouched', async () => {
+		const listAll = vi.fn().mockResolvedValue([task('1')]);
+		const { tasks } = store(
+			fakeRemote({ listAll, update: vi.fn().mockRejectedValue(failure(500)) }),
+		);
+
+		await tasks.load();
+		await tasks.update('1', { title: 'New' });
+
+		expect(tasks.tasks.map((t) => t.title)).toEqual(['Task 1']);
+		expect(tasks.error).toBeTruthy();
+	});
+});
+
 describe('update', () => {
 	it('replaces the record in place with the server response', async () => {
 		const listAll = vi.fn().mockResolvedValue([task('1', { title: 'Old' })]);

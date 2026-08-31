@@ -125,7 +125,46 @@ State: `tasks`, `loading`, `loaded`, `error`, `now`. Derived: `open`, `completed
 - A failed write leaves the list exactly as it was. A failed `load()` keeps the last known
   tasks on screen with a warning.
 - A `401` is rethrown by every action rather than folded into `error` — only the session layer
-  can act on it.
+  can act on it. A **`422` is rethrown for the same reason**: it names the fields it rejected,
+  and only the form showing those fields can use that detail.
+- `fetchOne(id)` prefers what is already held, so opening a task from the list costs no
+  request; it fetches only for a deep link that arrived before the list.
+
+### `lib/dueFields.js`
+
+Moves a due date between the API's single `due_at` string and the form's two inputs — a date
+and an optional time. Two inputs rather than one `datetime-local`, because the granularity is
+the user's to choose and `datetime-local` cannot express "this day, no particular time".
+
+`joinDue()` drops a time given without a date rather than rejecting the save: a time alone is
+not a due date, and refusing the whole save over it would be the "computer says no" this app
+avoids. Nothing here converts zones — the wall-clock fields are sent exactly as typed, with a
+`Z` appended because that is what the server expects.
+
+### `components/ConfirmModal.vue`
+
+The one destructive-action gate. A labelled `role="dialog"`, focus moved to **Cancel** on open
+(this dialog only appears for things that cannot be undone, so the safe option is under the
+user's hands), Escape and click-outside both close, Tab swaps between the two buttons, and
+focus returns to whatever opened it on unmount — without that last part a keyboard user is
+dumped back at the top of the document.
+
+### `composables/useCompletedShown.js`
+
+Whether the completed section is open, remembered in `localStorage`. Every access is wrapped:
+the API throws outright in some private-browsing modes, and a stored value can be anything
+once a user has poked at it. Both failures fall back to hidden — a preference is never worth
+an exception.
+
+### `views/TaskFormView.vue`
+
+Serves both create and edit. It never sends `completed_at`: the store's update is a `PATCH`, so
+omitting the field leaves it alone, and mentioning it at all is how a completed task gets
+silently reopened.
+
+Failure handling follows the "minimize computer says no" rule — a blank title saves and comes
+back as the server's "Untitled task", a 422 puts the server's messages against the fields with
+everything typed still in place, and a dropped connection leaves the form populated to retry.
 
 ### `router.js`
 
@@ -230,3 +269,18 @@ the time that is shown, with no zone conversion in either direction.
 
 One remaining gap, accepted for now: `now` refreshes on load, not on a timer. A tab left open
 past midnight keeps yesterday's tasks under "Today" until the next refresh.
+
+### Managing Tasks (2026-08-31)
+
+The writes: complete and reopen from the list, a create/edit form, confirmed delete, and a
+persisted completed section. This closes the first working version. 228 tests.
+
+The completion checkbox is bound to `completed_at` rather than to the event, so which way a
+click goes is decided by the record — a double click cannot complete twice.
+
+One design change fell out of the form: the store now rethrows a `422` alongside a `401`.
+Folding it into a general error message stripped the field detail and left the user guessing
+which input was wrong.
+
+No new CSS class was added in this sprint. The form, the modal and the completed section are
+built entirely from the inventory laid down in sprint 1, which is what that ordering was for.

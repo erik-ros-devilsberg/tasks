@@ -1,13 +1,18 @@
 <script setup>
-import { onMounted } from 'vue';
+import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { useTasksStore } from '@/stores/tasks';
+import { useCompletedShown } from '@/composables/useCompletedShown';
 import { isOverdue } from '@/lib/taskSort';
 import { formatDue } from '@/lib/formatDue';
+import ConfirmModal from '@/components/ConfirmModal.vue';
 
 const router = useRouter();
 const tasks = useTasksStore();
+const completedShown = useCompletedShown();
+
+const deleting = ref(null);
 
 async function refresh() {
 	try {
@@ -22,6 +27,24 @@ async function refresh() {
 }
 
 onMounted(refresh);
+
+function toggle(task) {
+	// The checkbox reflects completed_at, so which way this goes is decided by
+	// the record rather than by the event — a double click cannot complete twice.
+	return task.completed_at === null ? tasks.complete(task.id) : tasks.reopen(task.id);
+}
+
+async function destroy() {
+	const task = deleting.value;
+	deleting.value = null;
+
+	await tasks.remove(task.id);
+}
+
+const completedOn = (task) =>
+	new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' }).format(
+		new Date(task.completed_at),
+	);
 </script>
 
 <template>
@@ -38,6 +61,24 @@ onMounted(refresh);
 					@click="refresh"
 				>
 					Refresh
+				</button>
+
+				<button
+					class="btn btn--ghost btn--sm"
+					type="button"
+					data-action="toggle-completed"
+					@click="completedShown = !completedShown"
+				>
+					{{ completedShown ? 'Hide completed' : 'Show completed' }}
+				</button>
+
+				<button
+					class="btn btn--primary btn--sm"
+					type="button"
+					data-action="new-task"
+					@click="router.push('/tasks/new')"
+				>
+					New task
 				</button>
 			</div>
 		</div>
@@ -73,6 +114,13 @@ onMounted(refresh);
 					class="list__row"
 					:class="{ 'is-overdue': isOverdue(task, tasks.now) }"
 				>
+					<input
+						type="checkbox"
+						:checked="false"
+						:aria-label="`Complete ${task.title}`"
+						@change="toggle(task)"
+					/>
+
 					<span class="list__primary">
 						{{ task.title }}
 
@@ -86,12 +134,85 @@ onMounted(refresh);
 						>
 					</span>
 
-					<span v-if="task.due_at" class="list__secondary">{{ formatDue(task) }}</span>
+					<span v-if="task.due_at" class="list__secondary">{{ formatDue(task, tasks.now) }}</span>
 
 					<!-- Overdue carries a word, not just a colour. -->
 					<span v-if="isOverdue(task, tasks.now)" class="badge badge--overdue">Overdue</span>
+
+					<button
+						class="btn btn--ghost btn--sm"
+						type="button"
+						data-action="edit"
+						:aria-label="`Edit ${task.title}`"
+						@click="router.push(`/tasks/${task.id}/edit`)"
+					>
+						Edit
+					</button>
+
+					<button
+						class="btn btn--ghost btn--sm"
+						type="button"
+						data-action="delete"
+						:aria-label="`Delete ${task.title}`"
+						@click="deleting = task"
+					>
+						Delete
+					</button>
 				</li>
 			</ul>
 		</div>
+
+		<div v-if="completedShown" class="list mt-2" data-section="completed">
+			<h2 class="list__header">Completed</h2>
+
+			<p v-if="tasks.completed.length === 0" class="text-muted">Nothing completed yet.</p>
+
+			<ul>
+				<li v-for="task in tasks.completed" :key="task.id" class="list__row">
+					<input
+						type="checkbox"
+						:checked="true"
+						:aria-label="`Reopen ${task.title}`"
+						@change="toggle(task)"
+					/>
+
+					<span class="list__primary text-muted">{{ task.title }}</span>
+
+					<span class="list__secondary">{{ completedOn(task) }}</span>
+
+					<!-- Completed is stated, not just greyed out. -->
+					<span class="badge">Done</span>
+
+					<button
+						class="btn btn--ghost btn--sm"
+						type="button"
+						data-action="edit"
+						:aria-label="`Edit ${task.title}`"
+						@click="router.push(`/tasks/${task.id}/edit`)"
+					>
+						Edit
+					</button>
+
+					<button
+						class="btn btn--ghost btn--sm"
+						type="button"
+						data-action="delete"
+						:aria-label="`Delete ${task.title}`"
+						@click="deleting = task"
+					>
+						Delete
+					</button>
+				</li>
+			</ul>
+		</div>
+
+		<ConfirmModal
+			v-if="deleting"
+			:title="`Delete “${deleting.title}”?`"
+			body="This cannot be undone."
+			confirm-label="Delete"
+			@confirm="destroy"
+			@cancel="deleting = null"
+		/>
 	</section>
 </template>

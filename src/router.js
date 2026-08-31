@@ -14,6 +14,17 @@ const routes = [
 		name: 'tasks',
 		component: () => import('@/views/TasksListView.vue'),
 	},
+	{
+		path: '/tasks/new',
+		name: 'task-new',
+		component: () => import('@/views/TaskFormView.vue'),
+	},
+	{
+		path: '/tasks/:id/edit',
+		name: 'task-edit',
+		component: () => import('@/views/TaskFormView.vue'),
+		props: true,
+	},
 ];
 
 /**

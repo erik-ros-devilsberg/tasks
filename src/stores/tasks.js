@@ -22,6 +22,15 @@ function isUnauthorized(failure) {
 	return failure?.status === 401;
 }
 
+/**
+ * A 422 names the fields it rejected, and only the form showing those fields
+ * can act on that. Folding it into a general error message would strip the
+ * detail and leave the user guessing which field was wrong.
+ */
+function isValidation(failure) {
+	return failure?.status === 422;
+}
+
 export const useTasksStore = defineStore('tasks', () => {
 	const tasks = ref([]);
 	// Starts true: nothing has been loaded yet, and starting false would flash
@@ -122,7 +131,7 @@ export const useTasksStore = defineStore('tasks', () => {
 
 			return { ok: true, value: await action() };
 		} catch (failure) {
-			if (isUnauthorized(failure)) {
+			if (isUnauthorized(failure) || isValidation(failure)) {
 				throw failure;
 			}
 
@@ -151,6 +160,27 @@ export const useTasksStore = defineStore('tasks', () => {
 		await load();
 
 		return null;
+	}
+
+	/**
+	 * One task, for a deep link into the form before the list has loaded.
+	 * Prefers what is already held — a task opened from the list should not
+	 * cost a request.
+	 */
+	async function fetchOne(id) {
+		const held = tasks.value.find((task) => task.id === id);
+
+		if (held) {
+			return held;
+		}
+
+		const { value } = await attempt(() => remote.get(id), 'Could not load that task.');
+
+		if (value) {
+			replaceLocal(value);
+		}
+
+		return value;
 	}
 
 	async function create(body) {
@@ -196,6 +226,7 @@ export const useTasksStore = defineStore('tasks', () => {
 		groups,
 		forget,
 		load,
+		fetchOne,
 		create,
 		update,
 		complete,

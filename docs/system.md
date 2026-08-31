@@ -284,3 +284,18 @@ which input was wrong.
 
 No new CSS class was added in this sprint. The form, the modal and the completed section are
 built entirely from the inventory laid down in sprint 1, which is what that ordering was for.
+
+A second review ran after the sprint was committed and found eight issues, all fixed. The
+worst was a data-loss path: when the edit form failed to load its task it rendered blank and
+still submittable, so pressing Save PATCHed empty fields over the real record — one transient
+network failure could wipe a task's title, notes and due date. The form now refuses to save a
+record it never read.
+
+Three more came from the 422 rethrow itself, which had been widened past the form: `complete`,
+`reopen` and `remove` have no `catch`, so a 422 there became an unhandled rejection and a click
+that did nothing. The rethrow is now opt-in per action. The other fixes: every write path in
+both views catches the rethrown 401 and ends the session instead of leaving the user on a
+screen that still looks signed in; the completion checkbox binds to the record rather than a
+literal, and is re-synced by hand after a failure, because Vue will not re-patch a prop it
+believes is unchanged — without that a failed complete left a ticked box permanently claiming
+the task was done; and `toggle` now uses `isOpen` rather than its own narrower `=== null` test.

@@ -22,26 +22,49 @@ const fieldErrors = ref({});
 const error = ref('');
 const busy = ref(false);
 const confirmingDelete = ref(false);
+/*
+ * Set when the task being edited could not be read. The form must not be
+ * submittable in that state: an empty form PATCHed over a real record wipes its
+ * title, notes and due date because of one transient network failure.
+ */
+const unloadable = ref(false);
+
+/**
+ * The store rethrows a 401. The token is already gone by then, so the only
+ * useful thing left is to send the user somewhere they can sign in again —
+ * showing them "Unauthenticated." on a form that can never save is not.
+ */
+async function endSession() {
+	tasks.forget();
+	await router.replace('/login');
+}
 
 onMounted(async () => {
 	if (!editing.value) {
 		return;
 	}
 
-	// Reads from the store when the list is already loaded, and fetches only for
-	// a deep link that arrived before it.
-	const task = await tasks.fetchOne(id.value);
+	try {
+		// Reads from the store when the list is already loaded, and fetches only
+		// for a deep link that arrived before it.
+		const task = await tasks.fetchOne(id.value);
 
-	if (!task) {
-		return;
+		if (!task) {
+			unloadable.value = true;
+			error.value = tasks.error || 'Could not load that task.';
+
+			return;
+		}
+
+		title.value = task.title ?? '';
+		notes.value = task.notes ?? '';
+
+		const due = splitDue(task.due_at);
+		dueDate.value = due.date;
+		dueTime.value = due.time;
+	} catch {
+		await endSession();
 	}
-
-	title.value = task.title ?? '';
-	notes.value = task.notes ?? '';
-
-	const due = splitDue(task.due_at);
-	dueDate.value = due.date;
-	dueTime.value = due.time;
 });
 
 /**
@@ -58,6 +81,11 @@ function body() {
 }
 
 async function submit() {
+	// Never save a form that was never filled from the record.
+	if (unloadable.value) {
+		return;
+	}
+
 	busy.value = true;
 	fieldErrors.value = {};
 	error.value = '';
@@ -80,7 +108,7 @@ async function submit() {
 		if (failure.status === 422) {
 			fieldErrors.value = failure.data?.errors ?? {};
 		} else {
-			error.value = failure.message;
+			await endSession();
 		}
 	} finally {
 		busy.value = false;
@@ -90,10 +118,14 @@ async function submit() {
 async function destroy() {
 	confirmingDelete.value = false;
 
-	if (await tasks.remove(id.value)) {
-		await router.push('/');
-	} else {
-		error.value = tasks.error;
+	try {
+		if (await tasks.remove(id.value)) {
+			await router.push('/');
+		} else {
+			error.value = tasks.error || 'Could not delete that task.';
+		}
+	} catch {
+		await endSession();
 	}
 }
 </script>
@@ -133,7 +165,7 @@ async function destroy() {
 			<p v-if="error" class="error">{{ error }}</p>
 
 			<div class="form__actions">
-				<button class="btn btn--primary" type="submit" :disabled="busy">
+				<button class="btn btn--primary" type="submit" :disabled="busy || unloadable">
 					{{ busy ? 'Saving' : 'Save' }}
 				</button>
 

@@ -220,7 +220,49 @@ describe('editing a task', () => {
 	});
 });
 
+describe('when the task cannot be loaded', () => {
+	it('says so rather than showing a blank form that looks editable', async () => {
+		routeRef.value = { params: { id: '1' }, query: {} };
+		const get = vi.fn().mockRejectedValue(failure(500));
+		const { wrapper } = await mountForm(fakeRemote({ get }), []);
+
+		expect(wrapper.find('.error').exists()).toBe(true);
+	});
+
+	it('refuses to save, so a failed load cannot blank the real task', async () => {
+		routeRef.value = { params: { id: '1' }, query: {} };
+		const get = vi.fn().mockRejectedValue(failure(500));
+		const { wrapper, remote } = await mountForm(fakeRemote({ get }), []);
+
+		// The trap: an empty form PATCHed over a real record wipes its title,
+		// notes and due date because of one transient network blip.
+		expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeDefined();
+
+		await submit(wrapper);
+
+		expect(remote.update).not.toHaveBeenCalled();
+	});
+
+	it('ends the session rather than dying quietly when the token has expired', async () => {
+		routeRef.value = { params: { id: '1' }, query: {} };
+		const get = vi.fn().mockRejectedValue(failure(401));
+		await mountForm(fakeRemote({ get }), []);
+
+		expect(replaceMock).toHaveBeenCalledWith('/login');
+	});
+});
+
 describe('when the save is refused', () => {
+	it('ends the session on a 401 instead of showing "Unauthenticated." on a dead form', async () => {
+		const create = vi.fn().mockRejectedValue(failure(401));
+		const { wrapper } = await mountForm(fakeRemote({ create }));
+
+		await field(wrapper, 'title').setValue('Buy milk');
+		await submit(wrapper);
+
+		expect(replaceMock).toHaveBeenCalledWith('/login');
+	});
+
 	it('shows the server field message against the field, keeping what was typed', async () => {
 		const create = vi
 			.fn()
@@ -271,6 +313,31 @@ describe('deleting from the form', () => {
 
 		expect(remote.remove).toHaveBeenCalledWith('1');
 		expect(pushMock).toHaveBeenCalledWith('/');
+	});
+
+	it('ends the session when the token expired before the delete', async () => {
+		routeRef.value = { params: { id: '1' }, query: {} };
+		const remove = vi.fn().mockRejectedValue(failure(401));
+		const { wrapper } = await mountForm(fakeRemote({ remove }), [task('1')]);
+
+		await wrapper.find('[data-action="delete"]').trigger('click');
+		await wrapper.find('[data-action="confirm"]').trigger('click');
+		await flushPromises();
+
+		expect(replaceMock).toHaveBeenCalledWith('/login');
+	});
+
+	it('keeps the task and says so when the delete fails for another reason', async () => {
+		routeRef.value = { params: { id: '1' }, query: {} };
+		const remove = vi.fn().mockRejectedValue(failure(500));
+		const { wrapper } = await mountForm(fakeRemote({ remove }), [task('1')]);
+
+		await wrapper.find('[data-action="delete"]').trigger('click');
+		await wrapper.find('[data-action="confirm"]').trigger('click');
+		await flushPromises();
+
+		expect(wrapper.find('.error').text()).toBeTruthy();
+		expect(pushMock).not.toHaveBeenCalled();
 	});
 
 	it('offers no delete while creating — there is nothing to delete yet', async () => {

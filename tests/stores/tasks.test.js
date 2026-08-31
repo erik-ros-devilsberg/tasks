@@ -149,6 +149,20 @@ describe('a rejected write', () => {
 		await expect(tasks.create({ title: '' })).rejects.toMatchObject({ status: 422 });
 	});
 
+	it.each([
+		['complete', (tasks) => tasks.complete('1')],
+		['reopen', (tasks) => tasks.reopen('1')],
+		['remove', (tasks) => tasks.remove('1')],
+	])('folds a 422 from %s into a message — only the form can act on field errors', async (
+		action,
+		call,
+	) => {
+		const { tasks } = store(fakeRemote({ [action]: vi.fn().mockRejectedValue(failure(422)) }));
+
+		await expect(call(tasks)).resolves.not.toThrow();
+		expect(tasks.error).toBeTruthy();
+	});
+
 	it('folds any other failure into a message, leaving the list untouched', async () => {
 		const listAll = vi.fn().mockResolvedValue([task('1')]);
 		const { tasks } = store(

@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router';
 
 import { useTasksStore } from '@/stores/tasks';
 import { useCompletedShown } from '@/composables/useCompletedShown';
-import { isOverdue } from '@/lib/taskSort';
+import { isOpen, isOverdue } from '@/lib/taskSort';
 import { formatDue } from '@/lib/formatDue';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 
@@ -14,31 +14,44 @@ const completedShown = useCompletedShown();
 
 const deleting = ref(null);
 
-async function refresh() {
+/**
+ * The store rethrows a 401 and folds everything else into `tasks.error`. Every
+ * action has to catch it: the token is already gone by then, and without this
+ * the user is left on a list that still looks signed in.
+ */
+async function guard(action) {
 	try {
-		await tasks.load();
+		await action();
 	} catch {
-		// The store only rethrows a 401. The session is already cleared by then;
-		// forget the tasks too — they belong to the account that just ended, and
-		// this device may be handed to someone else.
+		// These tasks belong to the account that just ended, and this device may
+		// be handed to someone else.
 		tasks.forget();
 		await router.replace('/login');
 	}
 }
 
+const refresh = () => guard(() => tasks.load());
+
 onMounted(refresh);
 
-function toggle(task) {
-	// The checkbox reflects completed_at, so which way this goes is decided by
-	// the record rather than by the event — a double click cannot complete twice.
-	return task.completed_at === null ? tasks.complete(task.id) : tasks.reopen(task.id);
+async function toggle(task, event) {
+	// Which way this goes is decided by the record, not by the event — a double
+	// click cannot complete the same task twice.
+	await guard(() => (isOpen(task) ? tasks.complete(task.id) : tasks.reopen(task.id)));
+
+	// The browser has already flipped the box. If the write failed the record is
+	// unchanged, and Vue will not patch a prop it believes is the same — so put
+	// the DOM back by hand, or the row sits there claiming to be done.
+	if (event.target) {
+		event.target.checked = !isOpen(task);
+	}
 }
 
 async function destroy() {
 	const task = deleting.value;
 	deleting.value = null;
 
-	await tasks.remove(task.id);
+	await guard(() => tasks.remove(task.id));
 }
 
 const completedOn = (task) =>
@@ -116,9 +129,9 @@ const completedOn = (task) =>
 				>
 					<input
 						type="checkbox"
-						:checked="false"
+						:checked="!isOpen(task)"
 						:aria-label="`Complete ${task.title}`"
-						@change="toggle(task)"
+						@change="toggle(task, $event)"
 					/>
 
 					<span class="list__primary">
@@ -171,9 +184,9 @@ const completedOn = (task) =>
 				<li v-for="task in tasks.completed" :key="task.id" class="list__row">
 					<input
 						type="checkbox"
-						:checked="true"
+						:checked="!isOpen(task)"
 						:aria-label="`Reopen ${task.title}`"
-						@change="toggle(task)"
+						@change="toggle(task, $event)"
 					/>
 
 					<span class="list__primary text-muted">{{ task.title }}</span>

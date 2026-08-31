@@ -125,13 +125,16 @@ export const useTasksStore = defineStore('tasks', () => {
 	 * Returns whether it succeeded — separately from what it returned, because
 	 * an empty 204 body is a success that looks exactly like a failure.
 	 */
-	async function attempt(action, message) {
+	async function attempt(action, message, { surfaceValidation = false } = {}) {
 		try {
 			error.value = '';
 
 			return { ok: true, value: await action() };
 		} catch (failure) {
-			if (isUnauthorized(failure) || isValidation(failure)) {
+			// Only the form asks for validation errors, because only the form has
+			// fields to hang them on. Rethrowing to a checkbox handler would give
+			// an unhandled rejection and a click that does nothing.
+			if (isUnauthorized(failure) || (surfaceValidation && isValidation(failure))) {
 				throw failure;
 			}
 
@@ -184,12 +187,18 @@ export const useTasksStore = defineStore('tasks', () => {
 	}
 
 	async function create(body) {
-		return applyResult(await attempt(() => remote.create(body), 'Could not save that task.'));
+		return applyResult(
+			await attempt(() => remote.create(body), 'Could not save that task.', {
+				surfaceValidation: true,
+			}),
+		);
 	}
 
 	async function update(id, body) {
 		return applyResult(
-			await attempt(() => remote.update(id, body), 'Could not save that change.'),
+			await attempt(() => remote.update(id, body), 'Could not save that change.', {
+				surfaceValidation: true,
+			}),
 		);
 	}
 

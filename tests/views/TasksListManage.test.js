@@ -99,6 +99,49 @@ describe('completing a task', () => {
 		expect(remote.complete).toHaveBeenCalledTimes(1);
 	});
 
+	it('unticks the box when the server refuses, so it cannot claim a task is done', async () => {
+		const { wrapper } = await mounted(
+			fakeRemote({
+				listAll: vi.fn().mockResolvedValue([task('1')]),
+				complete: vi.fn().mockRejectedValue(failure(500)),
+			}),
+		);
+
+		const box = wrapper.find('input[type="checkbox"]');
+		await box.setValue(true);
+		await flushPromises();
+
+		expect(box.element.checked).toBe(false);
+	});
+
+	it('ends the session when the token has expired mid-click', async () => {
+		const { wrapper } = await mounted(
+			fakeRemote({
+				listAll: vi.fn().mockResolvedValue([task('1')]),
+				complete: vi.fn().mockRejectedValue(failure(401)),
+			}),
+		);
+
+		await wrapper.find('input[type="checkbox"]').setValue(true);
+		await flushPromises();
+
+		expect(replaceMock).toHaveBeenCalledWith('/login');
+	});
+
+	it('completes a task whose record omits completed_at entirely', async () => {
+		const { id, ...withoutKey } = { ...task('1'), id: '1' };
+		delete withoutKey.completed_at;
+		const { wrapper, remote } = await mounted(listing([{ id, ...withoutKey }]));
+
+		await wrapper.find('input[type="checkbox"]').setValue(true);
+		await flushPromises();
+
+		// A missing key means open. Reading it as "not null" would send a reopen
+		// on an already-open task — a no-op instead of the completion asked for.
+		expect(remote.complete).toHaveBeenCalledWith('1');
+		expect(remote.reopen).not.toHaveBeenCalled();
+	});
+
 	it('puts the row back and says so when the server refuses', async () => {
 		const { wrapper } = await mounted(
 			fakeRemote({
@@ -270,6 +313,21 @@ describe('deleting from the list', () => {
 		await flushPromises();
 
 		expect(wrapper.find('.error').exists()).toBe(false);
+	});
+
+	it('ends the session when the token expired before the delete', async () => {
+		const { wrapper } = await mounted(
+			fakeRemote({
+				listAll: vi.fn().mockResolvedValue([task('1')]),
+				remove: vi.fn().mockRejectedValue(failure(401)),
+			}),
+		);
+
+		await wrapper.find('[data-action="delete"]').trigger('click');
+		await wrapper.find('[data-action="confirm"]').trigger('click');
+		await flushPromises();
+
+		expect(replaceMock).toHaveBeenCalledWith('/login');
 	});
 
 	it('keeps the task and says so when the delete genuinely fails', async () => {

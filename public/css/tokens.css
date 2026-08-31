@@ -1,0 +1,59 @@
+/*
+ * Every colour, font, spacing and motion value in the app lives here.
+ * No hardcoded hex anywhere else — see CLAUDE.md §5.
+ */
+
+/* Open Sans from Bunny rather than Google: same faces, no tracking. */
+@import url('https://fonts.bunny.net/css?family=open-sans:400,500,600,700');
+
+/*
+ * Lemon Milk is a licensed brand asset. If the files are not vendored into
+ * public/fonts/ the sans-serif fallback carries the wordmark — do not
+ * substitute a different display face.
+ */
+@font-face {
+	font-family: 'Lemon Milk';
+	src: url('/fonts/LEMONMILK-Medium.otf') format('opentype');
+	font-weight: 500;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'Lemon Milk';
+	src: url('/fonts/LEMONMILK-Bold.otf') format('opentype');
+	font-weight: 700;
+	font-display: swap;
+}
+
+:root {
+	/* Primary */
+	--onyx: #0a0a10;
+	--ghost-white: #f7f7ff;
+	--blue-slate: #586f7c;
+	--hot-fuchsia: #ff3366;
+	--sea-green: #058c42;
+
+	/* Supporting */
+	--grey-dark: #38464e;
+	--gray-mid: #becad1;
+	--gray-light: #e9edf0;
+
+	/* Derived surfaces. Kept as tokens so no component reaches for rgba() itself. */
+	--overlay: rgba(10, 10, 16, 0.9);
+	--field-bg: rgba(88, 111, 124, 0.2);
+	--border: rgba(88, 111, 124, 0.4);
+
+	/* Typography */
+	--font-title: 'Lemon Milk', sans-serif;
+	--font-body: 'Open Sans', sans-serif;
+
+	/* Layout */
+	--container-max: 1200px;
+	--container-pad: 2rem;
+	--radius: 8px;
+	--radius-sm: 4px;
+
+	/* Motion */
+	--transition: 0.2s ease;
+	--transition-overlay: 0.3s ease;
+}

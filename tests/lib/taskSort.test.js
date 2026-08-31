@@ -7,7 +7,8 @@ import {
 	dueHasTime,
 	sortOpen,
 	sortCompleted,
-	groupOpen,
+	stateOf,
+	listTasks,
 } from '@/lib/taskSort';
 
 const task = (id, over = {}) => ({
@@ -151,69 +152,83 @@ describe('ordering completed tasks', () => {
 	});
 });
 
-describe('grouping open tasks', () => {
+describe('the state a row is coloured by', () => {
 	const now = local(2026, 8, 30, 12, 0);
 
-	it('buckets into overdue, today, upcoming and undated in that order', () => {
+	it('calls a task with a passed deadline overdue', () => {
+		expect(stateOf(task('1', { due_at: '2026-08-20' }), now)).toBe('overdue');
+	});
+
+	it('calls a task due later today today, not upcoming', () => {
+		expect(stateOf(task('1', { due_at: '2026-08-30T17:00:00.000000Z' }), now)).toBe('today');
+	});
+
+	it('calls a task whose time passed earlier today overdue, not today', () => {
+		expect(stateOf(task('1', { due_at: '2026-08-30T09:00:00.000000Z' }), now)).toBe('overdue');
+	});
+
+	it('calls a date-only task due today today for the whole day', () => {
+		expect(stateOf(task('1', { due_at: '2026-08-30' }), now)).toBe('today');
+	});
+
+	it('calls a task due after today upcoming', () => {
+		expect(stateOf(task('1', { due_at: '2026-09-05' }), now)).toBe('upcoming');
+	});
+
+	it('calls a task with no due date undated', () => {
+		expect(stateOf(task('1'), now)).toBe('undated');
+	});
+
+	it('calls a completed task completed, however late it was', () => {
+		const done = task('1', { due_at: '2026-08-01', completed_at: '2026-08-29T10:00:00.000000Z' });
+
+		// Completion outranks lateness: a finished task is not still a problem.
+		expect(stateOf(done, now)).toBe('completed');
+	});
+});
+
+describe('the one list the view renders', () => {
+	it('leaves completed tasks out unless they were asked for', () => {
 		const tasks = [
-			task('undated'),
-			task('upcoming', { due_at: '2026-09-05' }),
-			task('today', { due_at: '2026-08-30' }),
-			task('overdue', { due_at: '2026-08-20' }),
+			task('done', { completed_at: '2026-08-29T10:00:00.000000Z' }),
+			task('open'),
 		];
 
-		const groups = groupOpen(tasks, now);
+		expect(listTasks(tasks).map((t) => t.id)).toEqual(['open']);
+	});
 
-		expect(groups.map((g) => g.key)).toEqual(['overdue', 'today', 'upcoming', 'undated']);
-		expect(groups.map((g) => g.tasks.map((t) => t.id))).toEqual([
-			['overdue'],
-			['today'],
-			['upcoming'],
-			['undated'],
+	it('mixes completed tasks into the same list, not into a section of their own', () => {
+		const tasks = [
+			task('undated'),
+			task('done', { due_at: '2026-09-01', completed_at: '2026-08-29T10:00:00.000000Z' }),
+			task('open', { due_at: '2026-09-05' }),
+		];
+
+		// Ordered by the same rule as everything else — a completed task does not
+		// sink to the bottom, it keeps its place.
+		expect(listTasks(tasks, { completed: true }).map((t) => t.id)).toEqual([
+			'done',
+			'open',
+			'undated',
 		]);
 	});
 
-	it('omits empty groups rather than rendering an empty heading', () => {
-		const groups = groupOpen([task('1', { due_at: '2026-09-05' })], now);
-
-		expect(groups.map((g) => g.key)).toEqual(['upcoming']);
-	});
-
-	it('gives every group a label the view can render as-is', () => {
-		const groups = groupOpen([task('1')], now);
-
-		expect(groups[0].label).toBe('No due date');
-	});
-
-	it('counts a task due later today as today, not upcoming', () => {
-		const laterToday = task('1', { due_at: '2026-08-30T17:00:00.000000Z' });
-
-		expect(groupOpen([laterToday], now).map((g) => g.key)).toEqual(['today']);
-	});
-
-	it('counts a task whose time passed earlier today as overdue, not today', () => {
-		const earlierToday = task('1', { due_at: '2026-08-30T09:00:00.000000Z' });
-
-		expect(groupOpen([earlierToday], now).map((g) => g.key)).toEqual(['overdue']);
-	});
-
-	it('leaves completed tasks out entirely — this groups the open list', () => {
+	it('orders soonest due first, undated last, ties broken by title', () => {
 		const tasks = [
-			task('done', { due_at: '2026-08-20', completed_at: '2026-08-21T10:00:00.000000Z' }),
-			task('open', { due_at: '2026-08-20' }),
+			task('b', { title: 'B' }),
+			task('a', { title: 'A' }),
+			task('later', { title: 'Later', due_at: '2026-09-10' }),
+			task('sooner', { title: 'Sooner', due_at: '2026-09-02' }),
 		];
 
-		const groups = groupOpen(tasks, now);
-
-		expect(groups.flatMap((g) => g.tasks).map((t) => t.id)).toEqual(['open']);
+		expect(listTasks(tasks).map((t) => t.id)).toEqual(['sooner', 'later', 'a', 'b']);
 	});
 
-	it('sorts within each group, so a bucket is never in arrival order', () => {
-		const tasks = [
-			task('later', { due_at: '2026-09-10' }),
-			task('sooner', { due_at: '2026-09-02' }),
-		];
+	it('leaves the given array alone — sorting in place would mutate store state', () => {
+		const tasks = [task('b', { title: 'B' }), task('a', { title: 'A' })];
 
-		expect(groupOpen(tasks, now)[0].tasks.map((t) => t.id)).toEqual(['sooner', 'later']);
+		listTasks(tasks);
+
+		expect(tasks.map((t) => t.id)).toEqual(['b', 'a']);
 	});
 });

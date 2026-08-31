@@ -16,6 +16,11 @@ const editing = computed(() => id.value !== null);
 const title = ref('');
 const notes = ref('');
 const dueDate = ref('');
+/*
+ * Not a field any more — the form registers a day, not a time of day. It is
+ * still read off the record and sent back so that editing a task registered as
+ * "Friday at 14:30" does not quietly demote it to "Friday, some time".
+ */
 const dueTime = ref('');
 
 const fieldErrors = ref({});
@@ -148,18 +153,14 @@ async function destroy() {
 			</div>
 
 			<!--
-				Two inputs, not one datetime-local: "this day, no particular time"
-				is a real answer and datetime-local cannot express it.
+				A date input, not a datetime-local: "this day, no particular time"
+				is the answer this form gives, and datetime-local cannot express it.
 			-->
 			<div class="field">
 				<label for="due_date">Due</label>
 				<input id="due_date" v-model="dueDate" name="due_date" type="date" />
-				<p v-if="fieldErrors.due_at" class="field__error">{{ fieldErrors.due_at[0] }}</p>
-			</div>
 
-			<div class="field">
-				<label for="due_time">At (optional)</label>
-				<input id="due_time" v-model="dueTime" name="due_time" type="time" />
+				<p v-if="fieldErrors.due_at" class="field__error">{{ fieldErrors.due_at[0] }}</p>
 			</div>
 
 			<p v-if="error" class="error">{{ error }}</p>

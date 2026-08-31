@@ -54,6 +54,11 @@ describe('shared class inventory', () => {
 		'.list',
 		'.list__header',
 		'.list__row',
+		'.list__row--overdue',
+		'.list__row--today',
+		'.list__row--upcoming',
+		'.list__row--undated',
+		'.list__row--completed',
 		'.list__primary',
 		'.list__secondary',
 		'.form',
@@ -64,6 +69,12 @@ describe('shared class inventory', () => {
 		'.btn--primary',
 		'.btn--ghost',
 		'.btn--sm',
+		'.btn--icon',
+		'.btn--fab',
+		'.menu',
+		'.menu__panel',
+		'.menu__item',
+		'.footer',
 		'.modal',
 		'.modal__dialog',
 		'.modal__actions',
@@ -82,6 +93,54 @@ describe('shared class inventory', () => {
 
 	it.each(required)('defines %s', (selector) => {
 		expect(all).toContain(`${selector} `);
+	});
+});
+
+describe('the list runs edge to edge', () => {
+	it('pulls the list out of the container gutter, so a row is not inset by it', () => {
+		// The row's background is what states its status. Leaving the page colour
+		// showing down both sides turns that into a stripe rather than a row.
+		expect(read('components.css')).toMatch(/\.list\s*\{[^}]*margin:[^;]*calc\(var\(--container-pad\)\s*\*\s*-1\)/);
+	});
+
+	it('keeps a row padded to the container gutter, so the text still lines up', () => {
+		expect(read('components.css')).toMatch(/\.list__row\s*\{[^}]*padding:[^;]*var\(--container-pad\)/);
+	});
+});
+
+describe('native controls', () => {
+	it('tells the browser this is a dark app, so date pickers are not drawn for a white one', () => {
+		// Without this the calendar widget and its icon come back in the UA's
+		// light palette — a dark glyph on a dark field, which reads as a date
+		// input that does nothing when you click it.
+		expect(read('base.css')).toMatch(/color-scheme:\s*dark/);
+	});
+});
+
+describe('a completed row', () => {
+	it('strikes the title through, so a done task is skipped rather than read', () => {
+		expect(read('components.css')).toMatch(
+			/\.list__row--completed .list__primary\s*\{[^}]*text-decoration:\s*line-through/,
+		);
+	});
+
+	it('dims the ink rather than leaving it as loud as an open task', () => {
+		// Dimmer, not invisible: it still has to clear the contrast floor.
+		expect(read('tokens.css')).toMatch(/--row-completed-ink:\s*var\(--gray-faint\)/);
+	});
+});
+
+describe('the add button', () => {
+	it('is pinned to the screen rather than scrolling away up the page', () => {
+		expect(read('components.css')).toMatch(/\.btn--fab\s*\{[^}]*position:\s*fixed/);
+	});
+
+	it('clears whatever the device carves out at the bottom', () => {
+		expect(read('components.css')).toMatch(/\.btn--fab\s*\{[^}]*safe-area-inset-bottom/);
+	});
+
+	it('leaves room under the list so it never covers the last task', () => {
+		expect(read('layout.css')).toMatch(/\.app-main\s*\{[^}]*padding-bottom/);
 	});
 });
 

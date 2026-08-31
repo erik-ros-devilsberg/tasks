@@ -36,7 +36,27 @@
 	/* Supporting */
 	--grey-dark: #38464e;
 	--gray-mid: #becad1;
+	/* Dimmer than gray-mid and still over 4.5:1 on the row surfaces. */
+	--gray-faint: #8b98a1;
 	--gray-light: #e9edf0;
+
+	/*
+	 * Row states. The list carries no badges any more, so the background of a
+	 * row is what tells the user where a task stands. Each pairs with the ink
+	 * token below it — dark ink on the bright fills, light ink on the dark ones
+	 * — so every row clears the contrast floor rather than only the pretty ones.
+	 */
+	--row-overdue: #8f0f26;
+	--row-overdue-ink: var(--ghost-white);
+	--row-today: #b35c00;
+	--row-today-ink: var(--ghost-white);
+	--row-upcoming: #0bbf5c;
+	--row-upcoming-ink: var(--onyx);
+	/* Faded against the dated rows, but not so faint the task reads as filler. */
+	--row-undated: rgba(11, 191, 92, 0.42);
+	--row-undated-ink: var(--ghost-white);
+	--row-completed: rgba(247, 247, 255, 0.07);
+	--row-completed-ink: var(--gray-faint);
 
 	/* Derived surfaces. Kept as tokens so no component reaches for rgba() itself. */
 	--overlay: rgba(10, 10, 16, 0.9);

@@ -1,9 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mount, flushPromises } from '@vue/test-utils';
+import { enableAutoUnmount, mount, flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 
 import TasksListView from '@/views/TasksListView.vue';
-import { useRemote } from '@/stores/tasks';
+import { useRemote, useTasksStore } from '@/stores/tasks';
+
+// The view listens on document and window for the tab coming back. A wrapper
+// left mounted keeps listening into the next test and reloads someone else's
+// list.
+enableAutoUnmount(afterEach);
 
 const { pushMock, replaceMock } = vi.hoisted(() => ({ pushMock: vi.fn(), replaceMock: vi.fn() }));
 vi.mock('vue-router', () => ({
@@ -58,6 +63,7 @@ const failure = (status) => Object.assign(new Error(`Request failed (${status}).
 const NOW = new Date(2026, 7, 30, 12, 0);
 
 beforeEach(() => {
+	localStorage.clear();
 	vi.useFakeTimers({ shouldAdvanceTime: true });
 	vi.setSystemTime(NOW);
 	pushMock.mockClear();
@@ -95,7 +101,7 @@ describe('loading the list', () => {
 	});
 });
 
-describe('grouping', () => {
+describe('one flat list', () => {
 	// Built per test: vi.restoreAllMocks() between tests would strip the
 	// implementation off a fake shared at describe scope.
 	const spread = () =>
@@ -108,23 +114,25 @@ describe('grouping', () => {
 			]),
 		});
 
-	it('renders the groups in order: overdue, today, upcoming, undated', async () => {
+	it('renders no group headings — the colour of a row says what a heading used to', async () => {
 		const wrapper = await mounted(spread());
 
-		const headers = wrapper.findAll('.list__header').map((h) => h.text());
-
-		expect(headers).toEqual(['Overdue', 'Today', 'Upcoming', 'No due date']);
+		expect(wrapper.findAll('.list__header')).toHaveLength(0);
+		expect(wrapper.findAll('.list')).toHaveLength(1);
 	});
 
-	it('omits a group with nothing in it rather than rendering an empty heading', async () => {
-		const wrapper = await mounted(
-			fakeRemote({ listAll: vi.fn().mockResolvedValue([task('1', { due_at: '2026-09-05' })]) }),
-		);
+	it('orders soonest due first and undated last, across every state', async () => {
+		const wrapper = await mounted(spread());
 
-		expect(wrapper.findAll('.list__header').map((h) => h.text())).toEqual(['Upcoming']);
+		expect(wrapper.findAll('.list__row').map((row) => row.text())).toEqual([
+			expect.stringContaining('Task overdue'),
+			expect.stringContaining('Task today'),
+			expect.stringContaining('Task upcoming'),
+			expect.stringContaining('Task undated'),
+		]);
 	});
 
-	it('leaves completed tasks out of the open list', async () => {
+	it('leaves completed tasks out until they are asked for', async () => {
 		const wrapper = await mounted(
 			fakeRemote({
 				listAll: vi
@@ -135,65 +143,164 @@ describe('grouping', () => {
 
 		expect(wrapper.findAll('.list__row')).toHaveLength(0);
 	});
+
+	it('mixes completed tasks into the same list when they are, not into a section', async () => {
+		const wrapper = await mounted(
+			fakeRemote({
+				listAll: vi.fn().mockResolvedValue([
+					task('open', { due_at: '2026-09-05' }),
+					task('done', { due_at: '2026-09-01', completed_at: '2026-08-30T10:00:00.000000Z' }),
+				]),
+			}),
+		);
+		useTasksStore().completedShown = true;
+		await flushPromises();
+
+		expect(wrapper.findAll('[data-section="completed"]')).toHaveLength(0);
+		expect(wrapper.findAll('.list__row').map((row) => row.text())).toEqual([
+			expect.stringContaining('Task done'),
+			expect.stringContaining('Task open'),
+		]);
+	});
 });
 
 describe('a row', () => {
+	const one = (over) => fakeRemote({ listAll: vi.fn().mockResolvedValue([task('1', over)]) });
+
 	it('shows the task title', async () => {
-		const wrapper = await mounted(
-			fakeRemote({ listAll: vi.fn().mockResolvedValue([task('1', { title: 'Buy milk' })]) }),
-		);
+		const wrapper = await mounted(one({ title: 'Buy milk' }));
 
 		expect(wrapper.find('.list__primary').text()).toContain('Buy milk');
 	});
 
-	it('shows a date-only due date without inventing a time for it', async () => {
-		const wrapper = await mounted(
-			fakeRemote({ listAll: vi.fn().mockResolvedValue([task('1', { due_at: '2026-09-05' })]) }),
-		);
-
-		const text = wrapper.find('.list__secondary').text();
-
-		expect(text).toMatch(/5 Sep|Sep 5|05 Sep/i);
-		expect(text).not.toMatch(/\d{2}:\d{2}/);
-	});
-
-	it('shows the time on a datetime due date, so the two granularities are distinguishable', async () => {
-		const wrapper = await mounted(
-			fakeRemote({
-				listAll: vi.fn().mockResolvedValue([task('1', { due_at: '2026-09-05T14:30:00.000000Z' })]),
-			}),
-		);
-
-		expect(wrapper.find('.list__secondary').text()).toMatch(/14:30/);
-	});
-
-	it('marks an overdue row with text, not colour alone', async () => {
-		const wrapper = await mounted(
-			fakeRemote({ listAll: vi.fn().mockResolvedValue([task('1', { due_at: '2026-08-20' })]) }),
-		);
-
+	it('carries a tick box, the name and a delete control — and nothing else', async () => {
+		const wrapper = await mounted(one({ due_at: '2026-09-05', notes: 'Some notes' }));
 		const row = wrapper.find('.list__row');
 
-		expect(row.classes()).toContain('is-overdue');
-		expect(row.text()).toMatch(/overdue/i);
+		expect(row.find('input[type="checkbox"]').exists()).toBe(true);
+		expect(row.find('[data-action="open"]').exists()).toBe(true);
+		expect(row.find('[data-action="delete"]').exists()).toBe(true);
+		expect(row.findAll('button')).toHaveLength(2);
 	});
 
-	it('indicates a task carries notes without spilling them into the list', async () => {
-		const notes = 'A very long note '.repeat(50);
-		const wrapper = await mounted(
-			fakeRemote({ listAll: vi.fn().mockResolvedValue([task('1', { notes })]) }),
-		);
-
+	it('shows no due date, no badge and no note indicator — the row is the name', async () => {
+		const wrapper = await mounted(one({ due_at: '2026-09-05', notes: 'Some notes' }));
 		const row = wrapper.find('.list__row');
 
-		expect(row.find('[data-role="has-notes"]').exists()).toBe(true);
-		expect(row.text()).not.toContain(notes);
+		expect(row.find('.list__secondary').exists()).toBe(false);
+		expect(row.find('.badge').exists()).toBe(false);
+		expect(row.find('[data-role="has-notes"]').exists()).toBe(false);
+		expect(row.text()).not.toMatch(/5 Sep|Sep 5|05 Sep/i);
 	});
 
-	it('shows no note indicator when there are none', async () => {
-		const wrapper = await mounted(fakeRemote({ listAll: vi.fn().mockResolvedValue([task('1')]) }));
+	it('opens the task form when the name is clicked', async () => {
+		const wrapper = await mounted(one({ title: 'Buy milk' }));
 
-		expect(wrapper.find('[data-role="has-notes"]').exists()).toBe(false);
+		await wrapper.find('[data-action="open"]').trigger('click');
+
+		expect(pushMock).toHaveBeenCalledWith('/tasks/1/edit');
+	});
+
+	it('offers the name as a real button, so it is reachable without a mouse', async () => {
+		const wrapper = await mounted(one({ title: 'Buy milk' }));
+
+		expect(wrapper.find('[data-action="open"]').element.tagName).toBe('BUTTON');
+	});
+});
+
+describe('the colour a row carries', () => {
+	const one = (over) => fakeRemote({ listAll: vi.fn().mockResolvedValue([task('1', over)]) });
+
+	const rowFor = async (over) => (await mounted(one(over))).find('.list__row');
+
+	it('marks an overdue task', async () => {
+		expect((await rowFor({ due_at: '2026-08-20' })).classes()).toContain('list__row--overdue');
+	});
+
+	it('marks a task due today', async () => {
+		expect((await rowFor({ due_at: '2026-08-30' })).classes()).toContain('list__row--today');
+	});
+
+	it('marks a task due later', async () => {
+		expect((await rowFor({ due_at: '2026-09-05' })).classes()).toContain('list__row--upcoming');
+	});
+
+	it('marks a task with no due date', async () => {
+		expect((await rowFor({})).classes()).toContain('list__row--undated');
+	});
+
+	it('marks a completed task, whatever its due date was', async () => {
+		const wrapper = await mounted(
+			one({ due_at: '2026-08-20', completed_at: '2026-08-29T10:00:00.000000Z' }),
+		);
+		useTasksStore().completedShown = true;
+		await flushPromises();
+
+		expect(wrapper.find('.list__row').classes()).toContain('list__row--completed');
+	});
+
+	it('names the state in text for anyone who cannot see the colour', async () => {
+		const row = await rowFor({ due_at: '2026-08-20' });
+
+		// The badges are gone, so this is the only thing left carrying the state.
+		// Colour alone would leave a screen reader with nothing at all.
+		expect(row.find('.visually-hidden').text()).toMatch(/overdue/i);
+	});
+});
+
+describe('keeping the list current without being asked', () => {
+	it('reloads when the tab is looked at again', async () => {
+		const remote = fakeRemote();
+		await mounted(remote);
+
+		document.dispatchEvent(new Event('visibilitychange'));
+		await flushPromises();
+
+		expect(remote.listAll).toHaveBeenCalledTimes(2);
+	});
+
+	it('reloads when the window is focused again', async () => {
+		const remote = fakeRemote();
+		await mounted(remote);
+		// Far enough past the mount load that it is not treated as the same visit.
+		vi.setSystemTime(new Date(NOW.getTime() + 60_000));
+
+		window.dispatchEvent(new Event('focus'));
+		await flushPromises();
+
+		expect(remote.listAll).toHaveBeenCalledTimes(2);
+	});
+
+	it('does not reload twice when a tab switch fires both signals at once', async () => {
+		const remote = fakeRemote();
+		await mounted(remote);
+
+		document.dispatchEvent(new Event('visibilitychange'));
+		window.dispatchEvent(new Event('focus'));
+		await flushPromises();
+
+		expect(remote.listAll).toHaveBeenCalledTimes(2);
+	});
+
+	it('polls nothing — a user working alone has nothing to race with', async () => {
+		const remote = fakeRemote();
+		await mounted(remote);
+
+		vi.advanceTimersByTime(10 * 60 * 1000);
+		await flushPromises();
+
+		expect(remote.listAll).toHaveBeenCalledOnce();
+	});
+
+	it('stops listening once the view is gone', async () => {
+		const remote = fakeRemote();
+		const wrapper = await mounted(remote);
+
+		wrapper.unmount();
+		document.dispatchEvent(new Event('visibilitychange'));
+		await flushPromises();
+
+		expect(remote.listAll).toHaveBeenCalledOnce();
 	});
 });
 
@@ -215,7 +322,7 @@ describe('when the server cannot be reached', () => {
 		const remote = fakeRemote({ listAll });
 		const wrapper = await mounted(remote);
 
-		await wrapper.find('[data-action="refresh"]').trigger('click');
+		document.dispatchEvent(new Event('visibilitychange'));
 		await flushPromises();
 
 		expect(wrapper.find('.error').exists()).toBe(true);
@@ -255,15 +362,16 @@ describe('an account whose tasks are all completed', () => {
 	});
 });
 
-describe('the overdue marker and the heading agree', () => {
-	it('never badges a row as overdue while it sits under Today', async () => {
+describe('a task due today', () => {
+	it('is not called overdue while its day is still running', async () => {
 		const wrapper = await mounted(
 			fakeRemote({ listAll: vi.fn().mockResolvedValue([task('1', { due_at: '2026-08-30' })]) }),
 		);
 
-		expect(wrapper.find('.list__header').text()).toBe('Today');
-		expect(wrapper.find('.list__row').text()).not.toMatch(/overdue/i);
-		expect(wrapper.find('.list__row').classes()).not.toContain('is-overdue');
+		const row = wrapper.find('.list__row');
+
+		expect(row.classes()).toContain('list__row--today');
+		expect(row.text()).not.toMatch(/overdue/i);
 	});
 });
 
@@ -274,7 +382,6 @@ describe('reusing the shared stylesheet', () => {
 		);
 
 		expect(wrapper.find('.list').exists()).toBe(true);
-		expect(wrapper.find('.list__header').exists()).toBe(true);
 		expect(wrapper.find('.list__row').exists()).toBe(true);
 		expect(wrapper.find('[class*="task-"]').exists()).toBe(false);
 	});

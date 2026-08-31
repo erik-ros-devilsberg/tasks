@@ -1,7 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
+import { nextTick } from 'vue';
 
 import { useTasksStore, useRemote } from '@/stores/tasks';
+import { COMPLETED_SHOWN_KEY } from '@/lib/completedPreference';
 
 const task = (id, over = {}) => ({
 	id,
@@ -36,7 +38,12 @@ function store(remote = fakeRemote()) {
 const failure = (status) => Object.assign(new Error(`Request failed (${status}).`), { status });
 
 beforeEach(() => {
+	localStorage.clear();
 	setActivePinia(createPinia());
+});
+
+afterEach(() => {
+	vi.restoreAllMocks();
 });
 
 describe('load', () => {
@@ -102,7 +109,7 @@ describe('load', () => {
 });
 
 describe('derived views of the list', () => {
-	it('exposes the open tasks grouped and ordered, not raw', async () => {
+	it('exposes the open tasks separately from the completed ones', async () => {
 		const listAll = vi.fn().mockResolvedValue([
 			task('undated'),
 			task('done', { completed_at: '2026-08-30T10:00:00.000000Z' }),
@@ -112,7 +119,7 @@ describe('derived views of the list', () => {
 
 		await tasks.load();
 
-		expect(tasks.groups.map((g) => g.key)).toEqual(['upcoming', 'undated']);
+		expect(tasks.open.map((t) => t.id).sort()).toEqual(['soon', 'undated']);
 	});
 
 	it('exposes completed tasks separately, most recent first', async () => {
@@ -357,5 +364,51 @@ describe('remove', () => {
 
 		expect(tasks.tasks.map((t) => t.id)).toEqual(['1']);
 		expect(tasks.error).toBeTruthy();
+	});
+});
+
+describe('the completed preference', () => {
+	it('starts hidden — a first-time user is shown what is left to do, not what is done', () => {
+		const { tasks } = store();
+
+		expect(tasks.completedShown).toBe(false);
+	});
+
+	it('remembers being switched on, so the choice survives a reload', async () => {
+		const first = store();
+		first.tasks.completedShown = true;
+		await nextTick();
+
+		setActivePinia(createPinia());
+
+		expect(useTasksStore().completedShown).toBe(true);
+	});
+
+	it('falls back to hidden on a stored value that is not a boolean', () => {
+		localStorage.setItem(COMPLETED_SHOWN_KEY, 'not-a-boolean');
+
+		expect(store().tasks.completedShown).toBe(false);
+	});
+
+	it('falls back to hidden when localStorage cannot be read at all', () => {
+		// Private-browsing modes throw outright. A preference is never worth an
+		// exception on the way into the app.
+		vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+			throw new Error('SecurityError');
+		});
+
+		expect(store().tasks.completedShown).toBe(false);
+	});
+
+	it('carries on when the preference cannot be written', async () => {
+		vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+			throw new Error('QuotaExceededError');
+		});
+		const { tasks } = store();
+
+		tasks.completedShown = true;
+		await nextTick();
+
+		expect(tasks.completedShown).toBe(true);
 	});
 });

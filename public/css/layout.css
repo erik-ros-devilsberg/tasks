@@ -33,7 +33,14 @@
 	gap: 1rem;
 }
 
-.nav__version {
+.footer {
+	padding: 1rem 0 calc(1rem + env(safe-area-inset-bottom, 0px));
+	border-top: 1px solid var(--border);
+}
+
+.footer__inner {
+	display: flex;
+	justify-content: flex-end;
 	font-size: 0.75rem;
 	letter-spacing: 0.05em;
 }
@@ -47,8 +54,8 @@
 }
 
 .app-main {
-	/* Whatever the device carves out at the bottom, plus room to breathe. */
-	padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
+	/* Room for the floating add button, so it never sits over the last task. */
+	padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
 }
 
 .app-main:focus {

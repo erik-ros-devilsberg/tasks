@@ -1,7 +1,8 @@
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { defineStore } from 'pinia';
 
-import { groupOpen, isCompleted, isOpen, sortCompleted } from '@/lib/taskSort';
+import { isCompleted, isOpen, listTasks, sortCompleted } from '@/lib/taskSort';
+import { readCompletedShown, writeCompletedShown } from '@/lib/completedPreference';
 
 /*
  * The remote is injected rather than imported. That is the seam that keeps view
@@ -42,10 +43,9 @@ export const useTasksStore = defineStore('tasks', () => {
 	const error = ref('');
 
 	/*
-	 * The clock the buckets are measured against, refreshed on every load. It is
-	 * state rather than a `new Date()` inside the computed so that the grouping
-	 * and the per-row overdue marker cannot disagree — a row must never carry an
-	 * "Overdue" badge while sitting under the "Today" heading.
+	 * The clock every row's state is measured against, refreshed on every load.
+	 * It is state rather than a `new Date()` read per row so that two rows
+	 * rendered in the same pass cannot disagree about where "today" ends.
 	 */
 	const now = ref(new Date());
 
@@ -56,9 +56,19 @@ export const useTasksStore = defineStore('tasks', () => {
 	 */
 	let generation = 0;
 
+	/*
+	 * A display preference rather than server state, but it lives here because
+	 * two places need the same answer: the nav menu that toggles it and the list
+	 * that renders it.
+	 */
+	const completedShown = ref(readCompletedShown());
+	watch(completedShown, writeCompletedShown);
+
 	const open = computed(() => tasks.value.filter(isOpen));
 	const completed = computed(() => sortCompleted(tasks.value.filter(isCompleted)));
-	const groups = computed(() => groupOpen(tasks.value, now.value));
+	// One flat list — completed tasks mixed in by the same ordering rule, not
+	// pushed into a section of their own.
+	const visible = computed(() => listTasks(tasks.value, { completed: completedShown.value }));
 
 	function replaceLocal(task) {
 		const at = tasks.value.findIndex((held) => held.id === task.id);
@@ -232,7 +242,8 @@ export const useTasksStore = defineStore('tasks', () => {
 		now,
 		open,
 		completed,
-		groups,
+		visible,
+		completedShown,
 		forget,
 		load,
 		fetchOne,

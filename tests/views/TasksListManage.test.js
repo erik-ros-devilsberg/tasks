@@ -1,10 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mount, flushPromises } from '@vue/test-utils';
+import { enableAutoUnmount, mount, flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 
 import TasksListView from '@/views/TasksListView.vue';
-import { useRemote } from '@/stores/tasks';
-import { COMPLETED_SHOWN_KEY } from '@/composables/useCompletedShown';
+import { useRemote, useTasksStore } from '@/stores/tasks';
+
+// The view listens on document and window for the tab coming back. A wrapper
+// left mounted keeps listening into the next test and reloads someone else's
+// list.
+enableAutoUnmount(afterEach);
 
 const { pushMock, replaceMock } = vi.hoisted(() => ({ pushMock: vi.fn(), replaceMock: vi.fn() }));
 vi.mock('vue-router', () => ({
@@ -36,17 +40,20 @@ function fakeRemote(over = {}) {
 	};
 }
 
-async function mounted(remote = fakeRemote()) {
+async function mounted(remote = fakeRemote(), { completedShown = false } = {}) {
 	const pinia = createPinia();
 	setActivePinia(pinia);
 	useRemote(remote);
+
+	const store = useTasksStore();
+	store.completedShown = completedShown;
 
 	const wrapper = mount(TasksListView, {
 		global: { plugins: [pinia], stubs: { RouterLink: true } },
 	});
 	await flushPromises();
 
-	return { wrapper, remote };
+	return { wrapper, remote, store };
 }
 
 const listing = (ids) => fakeRemote({ listAll: vi.fn().mockResolvedValue(ids) });
@@ -158,112 +165,64 @@ describe('completing a task', () => {
 	});
 });
 
-describe('the completed section', () => {
+describe('completed tasks in the list', () => {
 	const withCompleted = () =>
 		listing([
-			task('open'),
-			task('old', { completed_at: '2026-08-01T10:00:00.000000Z' }),
-			task('new', { completed_at: '2026-08-30T10:00:00.000000Z' }),
+			task('open', { due_at: '2026-09-05' }),
+			task('old', { due_at: '2026-08-01', completed_at: '2026-08-01T10:00:00.000000Z' }),
+			task('new', { due_at: '2026-09-01', completed_at: '2026-08-30T10:00:00.000000Z' }),
 		]);
 
-	it('is hidden until asked for', async () => {
+	it('are hidden until asked for', async () => {
 		const { wrapper } = await mounted(withCompleted());
 
-		expect(wrapper.find('[data-section="completed"]').exists()).toBe(false);
+		expect(wrapper.findAll('.list__row')).toHaveLength(1);
 	});
 
-	it('is revealed by a real button whose name says what it will do', async () => {
-		const { wrapper } = await mounted(withCompleted());
+	it('join the one list in the same order as everything else', async () => {
+		const { wrapper } = await mounted(withCompleted(), { completedShown: true });
 
-		const toggle = wrapper.find('[data-action="toggle-completed"]');
-
-		expect(toggle.element.tagName).toBe('BUTTON');
-		expect(toggle.text()).toMatch(/show/i);
-
-		await toggle.trigger('click');
-
-		expect(wrapper.find('[data-section="completed"]').exists()).toBe(true);
-		expect(wrapper.find('[data-action="toggle-completed"]').text()).toMatch(/hide/i);
-	});
-
-	it('lists what was finished most recently first', async () => {
-		const { wrapper } = await mounted(withCompleted());
-
-		await wrapper.find('[data-action="toggle-completed"]').trigger('click');
-
-		const rows = wrapper.findAll('[data-section="completed"] .list__row');
-
-		expect(rows.map((row) => row.text())).toEqual([
-			expect.stringContaining('Task new'),
+		// Ordered by due date like any other row — being done does not move a
+		// task to the bottom of the page.
+		expect(wrapper.findAll('.list__row').map((row) => row.text())).toEqual([
 			expect.stringContaining('Task old'),
+			expect.stringContaining('Task new'),
+			expect.stringContaining('Task open'),
 		]);
 	});
 
-	it('shows when each was completed', async () => {
-		const { wrapper } = await mounted(withCompleted());
+	it('come ticked, and say so without a badge', async () => {
+		const { wrapper } = await mounted(withCompleted(), { completedShown: true });
+		const row = wrapper.findAll('.list__row')[0];
 
-		await wrapper.find('[data-action="toggle-completed"]').trigger('click');
-
-		expect(wrapper.find('[data-section="completed"] .list__secondary').text()).toMatch(/Aug/);
+		expect(row.find('input[type="checkbox"]').element.checked).toBe(true);
+		expect(row.find('.badge').exists()).toBe(false);
+		expect(row.classes()).toContain('list__row--completed');
 	});
 
-	it('marks completed rows by more than colour', async () => {
-		const { wrapper } = await mounted(withCompleted());
+	it('name the box for reopening, not for completing again', async () => {
+		const { wrapper } = await mounted(withCompleted(), { completedShown: true });
 
-		await wrapper.find('[data-action="toggle-completed"]').trigger('click');
-
-		expect(wrapper.find('[data-section="completed"] .list__row').text()).toMatch(/done/i);
+		expect(
+			wrapper.findAll('.list__row')[0].find('input[type="checkbox"]').attributes('aria-label'),
+		).toMatch(/reopen/i);
 	});
 
-	it('reopens from here, returning the task to the open list', async () => {
-		const { wrapper, remote } = await mounted(withCompleted());
+	it('reopen from the same box that completed them', async () => {
+		const { wrapper, remote } = await mounted(withCompleted(), { completedShown: true });
 
-		await wrapper.find('[data-action="toggle-completed"]').trigger('click');
-		await wrapper.find('[data-section="completed"] input[type="checkbox"]').setValue(false);
+		await wrapper.findAll('.list__row')[0].find('input[type="checkbox"]').setValue(false);
 		await flushPromises();
 
-		expect(remote.reopen).toHaveBeenCalledWith('new');
-		expect(wrapper.findAll('[data-section="completed"] .list__row')).toHaveLength(1);
+		expect(remote.reopen).toHaveBeenCalledWith('old');
 	});
 
-	it('says so rather than showing an empty section when nothing is finished', async () => {
-		const { wrapper } = await mounted(listing([task('open')]));
-
-		await wrapper.find('[data-action="toggle-completed"]').trigger('click');
-
-		expect(wrapper.find('[data-section="completed"]').text()).toMatch(/nothing completed/i);
-	});
-});
-
-describe('remembering the completed preference', () => {
-	it('survives a reload', async () => {
-		const first = await mounted(listing([task('1', { completed_at: '2026-08-30T10:00:00.000000Z' })]));
-		await first.wrapper.find('[data-action="toggle-completed"]').trigger('click');
-
-		const second = await mounted(
+	it('leave the list saying nothing is open when every task is done', async () => {
+		const { wrapper } = await mounted(
 			listing([task('1', { completed_at: '2026-08-30T10:00:00.000000Z' })]),
 		);
 
-		expect(second.wrapper.find('[data-section="completed"]').exists()).toBe(true);
-	});
-
-	it('falls back to hidden when the stored value is nonsense rather than throwing', async () => {
-		localStorage.setItem(COMPLETED_SHOWN_KEY, 'not-a-boolean');
-
-		const { wrapper } = await mounted(listing([task('1')]));
-
-		expect(wrapper.find('[data-section="completed"]').exists()).toBe(false);
-	});
-
-	it('falls back to hidden when localStorage cannot be read at all', async () => {
-		const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
-			throw new Error('SecurityError');
-		});
-
-		const { wrapper } = await mounted(listing([task('1')]));
-
-		expect(wrapper.find('[data-section="completed"]').exists()).toBe(false);
-		getItem.mockRestore();
+		expect(wrapper.text()).toMatch(/nothing open/i);
 	});
 });
 
@@ -354,10 +313,24 @@ describe('getting to the form', () => {
 		expect(wrapper.find('[data-action="new-task"]').exists()).toBe(true);
 	});
 
-	it('opens a task for editing', async () => {
+	it('keeps the add control within thumb reach rather than at the top of the page', async () => {
+		const { wrapper } = await mounted();
+
+		expect(wrapper.find('[data-action="new-task"]').classes()).toContain('btn--fab');
+	});
+
+	it('names the add control even though it is drawn as a plus', async () => {
+		const { wrapper } = await mounted();
+
+		expect(wrapper.find('[data-action="new-task"]').attributes('aria-label')).toMatch(/new task/i);
+	});
+
+	it('opens a task by its name — there is no separate edit control any more', async () => {
 		const { wrapper } = await mounted(listing([task('1')]));
 
-		await wrapper.find('[data-action="edit"]').trigger('click');
+		expect(wrapper.find('[data-action="edit"]').exists()).toBe(false);
+
+		await wrapper.find('[data-action="open"]').trigger('click');
 
 		expect(pushMock).toHaveBeenCalledWith('/tasks/1/edit');
 	});

@@ -21,6 +21,8 @@ export default defineConfig(({ mode }) => ({
 		},
 	},
 	server: {
+		port: 8043,
+		strictPort: true,
 		proxy: {
 			// The app calls /api/v1/* relatively, so in production it is served
 			// from the server's own origin and no proxy exists. In development

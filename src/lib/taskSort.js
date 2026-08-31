@@ -122,14 +122,20 @@ export function sortCompleted(tasks) {
 	);
 }
 
-const GROUPS = [
-	{ key: 'overdue', label: 'Overdue' },
-	{ key: 'today', label: 'Today' },
-	{ key: 'upcoming', label: 'Upcoming' },
-	{ key: 'undated', label: 'No due date' },
-];
+/**
+ * The one word that describes a task right now: `completed`, `overdue`,
+ * `today`, `upcoming` or `undated`.
+ *
+ * The list signals this with a background colour, so it is also what the
+ * screen-reader-only label on each row says — colour is never the only carrier.
+ */
+export function stateOf(task, now = new Date()) {
+	// Completion outranks lateness. A finished task is not still a problem, no
+	// matter how long it sat there.
+	if (isCompleted(task)) {
+		return 'completed';
+	}
 
-function bucketOf(task, now) {
 	if (isOverdue(task, now)) {
 		return 'overdue';
 	}
@@ -144,15 +150,12 @@ function bucketOf(task, now) {
 }
 
 /**
- * Open tasks bucketed for display. Empty groups are dropped — an empty heading
- * is noise, not information.
+ * Everything the list renders, in one flat sequence.
+ *
+ * Completed tasks are mixed in by the same ordering rule rather than pushed to
+ * the end: the user asked for one list, and a finished task keeps the place its
+ * due date earned it.
  */
-export function groupOpen(tasks, now = new Date()) {
-	const open = tasks.filter(isOpen);
-
-	return GROUPS.map(({ key, label }) => ({
-		key,
-		label,
-		tasks: sortOpen(open.filter((task) => bucketOf(task, now) === key)),
-	})).filter((group) => group.tasks.length > 0);
+export function listTasks(tasks, { completed = false } = {}) {
+	return sortOpen(tasks.filter((task) => completed || isOpen(task)));
 }

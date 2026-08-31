@@ -113,6 +113,13 @@ describe('creating a task', () => {
 });
 
 describe('the due date', () => {
+	it('offers a date alone — the form registers a day, not a time of day', async () => {
+		const { wrapper } = await mountForm();
+
+		expect(field(wrapper, 'due_date').exists()).toBe(true);
+		expect(field(wrapper, 'due_time').exists()).toBe(false);
+	});
+
 	it('sends a date alone as a date, not as a midnight datetime', async () => {
 		const { wrapper, remote } = await mountForm();
 
@@ -120,27 +127,6 @@ describe('the due date', () => {
 		await submit(wrapper);
 
 		expect(remote.create.mock.calls[0][0].due_at).toBe('2026-09-05');
-	});
-
-	it('sends the registered time exactly, with no zone conversion applied', async () => {
-		const { wrapper, remote } = await mountForm();
-
-		await field(wrapper, 'due_date').setValue('2026-09-05');
-		await field(wrapper, 'due_time').setValue('14:30');
-		await submit(wrapper);
-
-		// 14:30 registered is 14:30 sent. Converting local→UTC here would send
-		// some other hour and the app would show it back.
-		expect(remote.create.mock.calls[0][0].due_at).toBe('2026-09-05T14:30:00Z');
-	});
-
-	it('ignores a time with no date — a time alone is not a due date', async () => {
-		const { wrapper, remote } = await mountForm();
-
-		await field(wrapper, 'due_time').setValue('14:30');
-		await submit(wrapper);
-
-		expect(remote.create.mock.calls[0][0].due_at).toBeNull();
 	});
 
 	it('clears the due date by sending null', async () => {
@@ -155,22 +141,59 @@ describe('the due date', () => {
 		expect(remote.update.mock.calls[0][1].due_at).toBeNull();
 	});
 
-	it('loads a date-only due date back into the date field alone', async () => {
+	it('loads a date-only due date back into the date field', async () => {
 		routeRef.value = { params: { id: '1' }, query: {} };
 		const { wrapper } = await mountForm(fakeRemote(), [task('1', { due_at: '2026-09-05' })]);
 
 		expect(field(wrapper, 'due_date').element.value).toBe('2026-09-05');
-		expect(field(wrapper, 'due_time').element.value).toBe('');
 	});
 
-	it('loads a registered time back unchanged, not shifted into the browser zone', async () => {
+	it('shows only the day of a task registered with a time', async () => {
 		routeRef.value = { params: { id: '1' }, query: {} };
 		const { wrapper } = await mountForm(fakeRemote(), [
 			task('1', { due_at: '2026-09-05T14:30:00.000000Z' }),
 		]);
 
 		expect(field(wrapper, 'due_date').element.value).toBe('2026-09-05');
-		expect(field(wrapper, 'due_time').element.value).toBe('14:30');
+	});
+
+	it('keeps a registered time the form no longer shows, rather than silently dropping it', async () => {
+		routeRef.value = { params: { id: '1' }, query: {} };
+		const { wrapper, remote } = await mountForm(fakeRemote(), [
+			task('1', { due_at: '2026-09-05T14:30:00.000000Z' }),
+		]);
+
+		await field(wrapper, 'title').setValue('Renamed');
+		await submit(wrapper);
+
+		// An edit that never touched the due date must not turn "Friday at 14:30"
+		// into "Friday, some time" — the field is gone from the form, not from
+		// the record.
+		expect(remote.update.mock.calls[0][1].due_at).toBe('2026-09-05T14:30:00Z');
+	});
+
+	it('carries the registered time over to a new day when the date is changed', async () => {
+		routeRef.value = { params: { id: '1' }, query: {} };
+		const { wrapper, remote } = await mountForm(fakeRemote(), [
+			task('1', { due_at: '2026-09-05T14:30:00.000000Z' }),
+		]);
+
+		await field(wrapper, 'due_date').setValue('2026-09-06');
+		await submit(wrapper);
+
+		expect(remote.update.mock.calls[0][1].due_at).toBe('2026-09-06T14:30:00Z');
+	});
+
+	it('drops the registered time once the due date is cleared', async () => {
+		routeRef.value = { params: { id: '1' }, query: {} };
+		const { wrapper, remote } = await mountForm(fakeRemote(), [
+			task('1', { due_at: '2026-09-05T14:30:00.000000Z' }),
+		]);
+
+		await field(wrapper, 'due_date').setValue('');
+		await submit(wrapper);
+
+		expect(remote.update.mock.calls[0][1].due_at).toBeNull();
 	});
 });
 

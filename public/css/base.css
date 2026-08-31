@@ -8,6 +8,13 @@
 
 html {
 	-webkit-text-size-adjust: 100%;
+	/*
+	 * The app is dark only. Without this the browser draws its own controls for
+	 * a light page — the date picker's calendar icon comes back as a dark glyph
+	 * on a dark field, and the field reads as broken because nothing visibly
+	 * responds to a click.
+	 */
+	color-scheme: dark;
 }
 
 body {

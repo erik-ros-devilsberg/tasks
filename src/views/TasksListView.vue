@@ -3,16 +3,26 @@ import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { useTasksStore } from '@/stores/tasks';
-import { useCompletedShown } from '@/composables/useCompletedShown';
-import { isOpen, isOverdue } from '@/lib/taskSort';
-import { formatDue } from '@/lib/formatDue';
+import { useRefreshOnReturn } from '@/composables/useRefreshOnReturn';
+import { isOpen, stateOf } from '@/lib/taskSort';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 
 const router = useRouter();
 const tasks = useTasksStore();
-const completedShown = useCompletedShown();
 
 const deleting = ref(null);
+
+/*
+ * The row's state is signalled by its background colour, and colour is never
+ * the only carrier — this is the word a screen reader reads instead.
+ */
+const STATE_WORDS = {
+	overdue: 'Overdue',
+	today: 'Due today',
+	upcoming: 'Due later',
+	undated: 'No due date',
+	completed: 'Completed',
+};
 
 /**
  * The store rethrows a 401 and folds everything else into `tasks.error`. Every
@@ -33,6 +43,7 @@ async function guard(action) {
 const refresh = () => guard(() => tasks.load());
 
 onMounted(refresh);
+useRefreshOnReturn(refresh);
 
 async function toggle(task, event) {
 	// Which way this goes is decided by the record, not by the event — a double
@@ -53,48 +64,13 @@ async function destroy() {
 
 	await guard(() => tasks.remove(task.id));
 }
-
-const completedOn = (task) =>
-	new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' }).format(
-		new Date(task.completed_at),
-	);
 </script>
 
 <template>
 	<section class="app-view container">
-		<div class="toolbar">
-			<h1>Tasks</h1>
-
-			<div class="toolbar__actions">
-				<button
-					class="btn btn--ghost btn--sm"
-					type="button"
-					data-action="refresh"
-					:disabled="tasks.loading"
-					@click="refresh"
-				>
-					Refresh
-				</button>
-
-				<button
-					class="btn btn--ghost btn--sm"
-					type="button"
-					data-action="toggle-completed"
-					@click="completedShown = !completedShown"
-				>
-					{{ completedShown ? 'Hide completed' : 'Show completed' }}
-				</button>
-
-				<button
-					class="btn btn--primary btn--sm"
-					type="button"
-					data-action="new-task"
-					@click="router.push('/tasks/new')"
-				>
-					New task
-				</button>
-			</div>
-		</div>
+		<!-- The wordmark in the nav already names this view; a second "Tasks"
+			 on screen is noise. The heading stays for structure. -->
+		<h1 class="visually-hidden">Tasks</h1>
 
 		<!--
 			Shown alongside the list rather than instead of it: a failed reload
@@ -113,111 +89,67 @@ const completedOn = (task) =>
 			No tasks yet. Add one and it will show up here.
 		</p>
 
-		<p v-else-if="tasks.loaded && tasks.groups.length === 0" class="text-muted">
+		<p v-else-if="tasks.loaded && tasks.visible.length === 0" class="text-muted">
 			Nothing open. Everything here is done.
 		</p>
 
-		<div v-for="group in tasks.groups" :key="group.key" class="list">
-			<h2 class="list__header">{{ group.label }}</h2>
-
+		<!-- One list, no headings: the background colour says what a group label used to. -->
+		<div class="list">
 			<ul>
 				<li
-					v-for="task in group.tasks"
+					v-for="task in tasks.visible"
 					:key="task.id"
 					class="list__row"
-					:class="{ 'is-overdue': isOverdue(task, tasks.now) }"
+					:class="`list__row--${stateOf(task, tasks.now)}`"
 				>
 					<input
 						type="checkbox"
 						:checked="!isOpen(task)"
-						:aria-label="`Complete ${task.title}`"
+						:aria-label="`${isOpen(task) ? 'Complete' : 'Reopen'} ${task.title}`"
 						@change="toggle(task, $event)"
 					/>
 
-					<span class="list__primary">
+					<button
+						class="list__primary"
+						type="button"
+						data-action="open"
+						@click="router.push(`/tasks/${task.id}/edit`)"
+					>
 						{{ task.title }}
-
-						<!-- An indicator, not the note: a long note would wreck the row. -->
-						<span
-							v-if="task.notes"
-							class="text-muted"
-							data-role="has-notes"
-							title="This task has notes"
-							>·notes</span
-						>
-					</span>
-
-					<span v-if="task.due_at" class="list__secondary">{{ formatDue(task, tasks.now) }}</span>
-
-					<!-- Overdue carries a word, not just a colour. -->
-					<span v-if="isOverdue(task, tasks.now)" class="badge badge--overdue">Overdue</span>
-
-					<button
-						class="btn btn--ghost btn--sm"
-						type="button"
-						data-action="edit"
-						:aria-label="`Edit ${task.title}`"
-						@click="router.push(`/tasks/${task.id}/edit`)"
-					>
-						Edit
+						<span class="visually-hidden">{{ STATE_WORDS[stateOf(task, tasks.now)] }}</span>
 					</button>
 
 					<button
-						class="btn btn--ghost btn--sm"
+						class="btn btn--ghost btn--icon btn--sm"
 						type="button"
 						data-action="delete"
 						:aria-label="`Delete ${task.title}`"
 						@click="deleting = task"
 					>
-						Delete
+						<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+							<path d="M4 7h16M9 7V5h6v2M7 7l1 13h8l1-13M10 11v6M14 11v6" />
+						</svg>
 					</button>
 				</li>
 			</ul>
 		</div>
 
-		<div v-if="completedShown" class="list mt-2" data-section="completed">
-			<h2 class="list__header">Completed</h2>
-
-			<p v-if="tasks.completed.length === 0" class="text-muted">Nothing completed yet.</p>
-
-			<ul>
-				<li v-for="task in tasks.completed" :key="task.id" class="list__row">
-					<input
-						type="checkbox"
-						:checked="!isOpen(task)"
-						:aria-label="`Reopen ${task.title}`"
-						@change="toggle(task, $event)"
-					/>
-
-					<span class="list__primary text-muted">{{ task.title }}</span>
-
-					<span class="list__secondary">{{ completedOn(task) }}</span>
-
-					<!-- Completed is stated, not just greyed out. -->
-					<span class="badge">Done</span>
-
-					<button
-						class="btn btn--ghost btn--sm"
-						type="button"
-						data-action="edit"
-						:aria-label="`Edit ${task.title}`"
-						@click="router.push(`/tasks/${task.id}/edit`)"
-					>
-						Edit
-					</button>
-
-					<button
-						class="btn btn--ghost btn--sm"
-						type="button"
-						data-action="delete"
-						:aria-label="`Delete ${task.title}`"
-						@click="deleting = task"
-					>
-						Delete
-					</button>
-				</li>
-			</ul>
-		</div>
+		<!--
+			Pinned to the bottom rather than sat in a toolbar: on a phone this is
+			the one control worth putting under the thumb, and it stays reachable
+			however far down the list the user has scrolled.
+		-->
+		<button
+			class="btn btn--primary btn--icon btn--fab"
+			type="button"
+			data-action="new-task"
+			aria-label="New task"
+			@click="router.push('/tasks/new')"
+		>
+			<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+				<path d="M12 5v14M5 12h14" />
+			</svg>
+		</button>
 
 		<ConfirmModal
 			v-if="deleting"

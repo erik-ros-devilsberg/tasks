@@ -20,9 +20,16 @@
 
 /* --- Lists -------------------------------------------------------------- */
 
+/*
+ * Pulled out of the container's gutter so a row spans the whole width it is
+ * given — the full screen on a phone, the container on a desktop. A row's
+ * background is what states its status, and leaving the page colour down both
+ * sides would turn that into a stripe instead of a row.
+ */
 .list {
 	display: flex;
 	flex-direction: column;
+	margin: 0 calc(var(--container-pad) * -1);
 }
 
 .list__header {
@@ -58,12 +65,65 @@
 	background: var(--field-bg);
 }
 
+/*
+ * Also the row's own control — clicking the name opens the task. Styled to
+ * disappear as a button so the row still reads as a line of text.
+ */
 .list__primary {
 	flex: 1 1 auto;
 	min-width: 0;
+	padding: 0;
+	background: none;
+	border: none;
 	overflow: hidden;
+	color: inherit;
+	font: inherit;
+	text-align: left;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+	cursor: pointer;
+}
+
+/*
+ * State by colour, because the row carries no badge to say it. Every fill is
+ * paired with the ink that stays legible on it — see tokens.css.
+ */
+.list__row--overdue {
+	background: var(--row-overdue);
+	color: var(--row-overdue-ink);
+}
+
+.list__row--today {
+	background: var(--row-today);
+	color: var(--row-today-ink);
+}
+
+.list__row--upcoming {
+	background: var(--row-upcoming);
+	color: var(--row-upcoming-ink);
+}
+
+.list__row--undated {
+	background: var(--row-undated);
+	color: var(--row-undated-ink);
+}
+
+.list__row--completed {
+	background: var(--row-completed);
+	color: var(--row-completed-ink);
+}
+
+/*
+ * Struck through and dimmed, so a finished task is something the eye skips on
+ * the way past rather than a line it has to read to dismiss.
+ */
+.list__row--completed .list__primary {
+	text-decoration: line-through;
+}
+
+/* The hover tint would wash the state colour out, so it only lifts the row. */
+.list__row[class*='list__row--']:hover {
+	filter: brightness(1.12);
 }
 
 .list__secondary {
@@ -128,6 +188,46 @@
 .btn--sm {
 	padding: 0.35rem 0.7rem;
 	font-size: 0.75rem;
+}
+
+/*
+ * The one control worth putting under a thumb. Fixed to the viewport, clear of
+ * whatever the device carves out at the bottom.
+ */
+.btn--fab {
+	position: fixed;
+	/*
+	 * Tracks the container's right edge on a wide screen instead of drifting off
+	 * to the far corner, and falls back to the plain gutter on anything narrower
+	 * than the container.
+	 */
+	right: max(var(--container-pad), calc(50vw - var(--container-max) / 2 + var(--container-pad)));
+	bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+	z-index: 20;
+	width: 3.5rem;
+	height: 3.5rem;
+	border-radius: 50%;
+	box-shadow: 0 4px 12px var(--overlay);
+}
+
+/* Square, for a button whose whole label is its icon. */
+.btn--icon {
+	padding: 0.5rem;
+	line-height: 0;
+}
+
+.btn--icon.btn--sm {
+	padding: 0.3rem;
+}
+
+.icon {
+	width: 1.25rem;
+	height: 1.25rem;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
 }
 
 .btn:disabled {
@@ -218,6 +318,47 @@
 	justify-content: flex-end;
 	gap: 0.75rem;
 	margin-top: 1.5rem;
+}
+
+/* --- Menu -------------------------------------------------------------- */
+
+.menu {
+	position: fixed;
+	inset: 0;
+	z-index: 40;
+	display: flex;
+	justify-content: flex-end;
+	align-items: flex-start;
+	padding: 3.5rem 1rem 1rem;
+	background: var(--overlay);
+}
+
+.menu__panel {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	max-width: 260px;
+	padding: 0.5rem;
+}
+
+.menu__item {
+	padding: 0.75rem 1rem;
+	background: none;
+	border: none;
+	border-radius: var(--radius-sm);
+	color: var(--ghost-white);
+	font-family: var(--font-title);
+	font-size: 0.9rem;
+	font-weight: 500;
+	letter-spacing: 0.1em;
+	text-align: left;
+	text-transform: uppercase;
+	cursor: pointer;
+	transition: background var(--transition);
+}
+
+.menu__item:hover {
+	background: var(--field-bg);
 }
 
 /* --- State -------------------------------------------------------------- */

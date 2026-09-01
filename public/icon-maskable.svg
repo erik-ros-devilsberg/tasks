@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+	<!--
+		The same mark, drawn small enough to survive being cropped.
+
+		Android does not show a maskable icon as supplied — it cuts it to whatever
+		shape the launcher uses, a circle on most devices, and only the centre 80%
+		is guaranteed to survive. The tick is therefore about 56% of the canvas
+		rather than the 72% of icon.svg: it looks generously padded as a square,
+		which is exactly what it has to be.
+	-->
+	<rect width="512" height="512" fill="#0a0a10" />
+	<g transform="translate(29.63,28.48) scale(3.356)">
+		<path
+			fill="#058c42"
+			d="m 39.621598,63.727972 q 2.687172,0 4.065209,4.409719 2.756074,8.268222 3.927406,8.268222 0.895724,0 1.86035,-1.378037 19.36142,-28.456465 35.828963,-40.514289 6.959087,-5.098737 13.573664,-5.098737 8.75054,0 10.54198,0.551215 0.75792,0.206706 0.75792,1.722546 0,1.240234 -1.58474,3.100584 -44.303889,50.849566 -52.778817,66.145775 -2.893878,5.23654 -13.366959,5.23654 -3.445093,0 -7.234695,-1.79144 -1.584742,-0.82683 -5.512148,-10.541988 -4.960933,-12.26453 -4.960933,-21.497378 0,-3.376191 4.82313,-5.58105 6.614577,-3.031682 9.921866,-3.031682 z"
+		/>
+	</g>
+</svg>

@@ -3,9 +3,11 @@ import { onMounted, onUnmounted, ref } from 'vue';
 
 defineProps({
 	completedShown: { type: Boolean, default: false },
+	pendingCount: { type: Number, default: 0 },
+	syncing: { type: Boolean, default: false },
 });
 
-const emit = defineEmits(['refresh', 'toggle-completed', 'sign-out', 'close']);
+const emit = defineEmits(['sync', 'toggle-completed', 'sign-out', 'close']);
 
 const panel = ref(null);
 
@@ -32,14 +34,21 @@ onUnmounted(() => {
 	-->
 	<div class="menu" @click.self="emit('close')" @keydown.esc="emit('close')">
 		<div ref="panel" class="menu__panel card" role="menu" aria-label="Menu">
+			<!--
+				"Sync now" rather than "Refresh": there may be work to push as well
+				as pull, and the count says how much. Disabled mid-sync so a second
+				press cannot start a drain on top of the first.
+			-->
 			<button
 				class="menu__item"
 				type="button"
 				role="menuitem"
-				data-action="refresh"
-				@click="emit('refresh')"
+				data-action="sync"
+				:disabled="syncing"
+				@click="emit('sync')"
 			>
-				Refresh
+				{{ syncing ? 'Syncing…' : 'Sync now' }}
+				<span v-if="pendingCount > 0" class="badge badge--pending">{{ pendingCount }}</span>
 			</button>
 
 			<button

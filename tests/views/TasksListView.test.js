@@ -305,45 +305,46 @@ describe('keeping the list current without being asked', () => {
 });
 
 describe('when the server cannot be reached', () => {
-	it('says so without blaming the user, and stops loading', async () => {
+	it('explains itself without blaming the user, and stops loading', async () => {
+		// A notice, not an error: the app is doing exactly what it was built to
+		// do. The user only needs to know why the list might be behind.
 		const wrapper = await mounted(
 			fakeRemote({ listAll: vi.fn().mockRejectedValue(failure(500)) }),
 		);
 
-		expect(wrapper.find('.error').exists()).toBe(true);
+		expect(wrapper.find('.notice').exists()).toBe(true);
+		expect(wrapper.find('.error').exists()).toBe(false);
 		expect(wrapper.text()).not.toMatch(/loading/i);
 	});
 
-	it('keeps showing the tasks it already had', async () => {
+	it('keeps showing the tasks saved on the device', async () => {
 		const listAll = vi
 			.fn()
 			.mockResolvedValueOnce([task('1', { title: 'Buy milk' })])
-			.mockRejectedValueOnce(failure(500));
-		const remote = fakeRemote({ listAll });
-		const wrapper = await mounted(remote);
+			.mockRejectedValue(failure(500));
+		const wrapper = await mounted(fakeRemote({ listAll }));
 
 		document.dispatchEvent(new Event('visibilitychange'));
 		await flushPromises();
 
-		expect(wrapper.find('.error').exists()).toBe(true);
+		expect(wrapper.find('.notice').exists()).toBe(true);
 		expect(wrapper.text()).toContain('Buy milk');
 	});
 
-	it('returns to login when the session has expired', async () => {
-		await mounted(fakeRemote({ listAll: vi.fn().mockRejectedValue(failure(401)) }));
-
-		expect(replaceMock).toHaveBeenCalledWith('/login');
-	});
-
-	it('does not claim the account is empty when the first load never arrived', async () => {
+	it('does not claim the account is empty when no sync has ever got through', async () => {
 		const wrapper = await mounted(
 			fakeRemote({ listAll: vi.fn().mockRejectedValue(failure(500)) }),
 		);
 
-		// "No tasks yet" alongside "could not reach the server" tells the user
-		// two contradictory things, one of which is a guess.
-		expect(wrapper.find('.error').exists()).toBe(true);
+		// "No tasks yet" alongside "no connection" tells the user two
+		// contradictory things, one of which is a guess.
 		expect(wrapper.text()).not.toMatch(/no tasks yet/i);
+	});
+
+	it('does say the account is empty once a sync has confirmed it', async () => {
+		const wrapper = await mounted(fakeRemote({ listAll: vi.fn().mockResolvedValue([]) }));
+
+		expect(wrapper.text()).toMatch(/no tasks yet/i);
 	});
 });
 

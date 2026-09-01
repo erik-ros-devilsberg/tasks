@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 
 import { useTasksStore } from '@/stores/tasks';
 import { joinDue, splitDue } from '@/lib/dueFields';
+import { formatDuration, parseDuration } from '@/lib/durationField';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 
 const route = useRoute();
@@ -22,66 +23,58 @@ const dueDate = ref('');
  * "Friday at 14:30" does not quietly demote it to "Friday, some time".
  */
 const dueTime = ref('');
+// Minutes, as text. Kept as the raw field value rather than a number so that a
+// half-typed entry is never silently rewritten under the user's cursor.
+const duration = ref('');
 
-const fieldErrors = ref({});
 const error = ref('');
 const busy = ref(false);
 const confirmingDelete = ref(false);
 /*
- * Set when the task being edited could not be read. The form must not be
- * submittable in that state: an empty form PATCHed over a real record wipes its
- * title, notes and due date because of one transient network failure.
+ * Set when the task being edited could not be found. The form must not be
+ * submittable in that state: an empty form saved over a real record wipes its
+ * title, notes, duration and due date.
  */
 const unloadable = ref(false);
-
-/**
- * The store rethrows a 401. The token is already gone by then, so the only
- * useful thing left is to send the user somewhere they can sign in again —
- * showing them "Unauthenticated." on a form that can never save is not.
- */
-async function endSession() {
-	tasks.forget();
-	await router.replace('/login');
-}
 
 onMounted(async () => {
 	if (!editing.value) {
 		return;
 	}
 
-	try {
-		// Reads from the store when the list is already loaded, and fetches only
-		// for a deep link that arrived before it.
-		const task = await tasks.fetchOne(id.value);
+	// Reads from the device, and syncs only for a deep link that arrived before
+	// this browser had ever seen the list.
+	const task = await tasks.fetchOne(id.value);
 
-		if (!task) {
-			unloadable.value = true;
-			error.value = tasks.error || 'Could not load that task.';
+	if (!task) {
+		unloadable.value = true;
+		error.value = 'Could not find that task.';
 
-			return;
-		}
-
-		title.value = task.title ?? '';
-		notes.value = task.notes ?? '';
-
-		const due = splitDue(task.due_at);
-		dueDate.value = due.date;
-		dueTime.value = due.time;
-	} catch {
-		await endSession();
+		return;
 	}
+
+	title.value = task.title ?? '';
+	notes.value = task.notes ?? '';
+	duration.value = formatDuration(task.duration);
+
+	const due = splitDue(task.due_at);
+	dueDate.value = due.date;
+	dueTime.value = due.time;
 });
 
 /**
- * Deliberately never sends `completed_at`. The store's update is a PATCH, so
- * omitting it leaves it alone — mentioning it at all is how a completed task
- * gets silently reopened.
+ * Deliberately never sends `completed_at`. Completion has its own two
+ * operations; letting it into an edit is how a finished task gets silently
+ * reopened.
  */
 function body() {
 	return {
 		title: title.value,
 		notes: notes.value === '' ? null : notes.value,
 		due_at: joinDue(dueDate.value, dueTime.value),
+		// Always present, never omitted: an absent key leaves a PATCH field
+		// untouched, so clearing the box has to send an explicit null.
+		duration: parseDuration(duration.value),
 	};
 }
 
@@ -92,29 +85,18 @@ async function submit() {
 	}
 
 	busy.value = true;
-	fieldErrors.value = {};
 	error.value = '';
 
 	try {
-		const saved = editing.value
-			? await tasks.update(id.value, body())
-			: await tasks.create(body());
-
-		// A null here means the store already recorded the failure; the form
-		// stays put with everything the user typed still in it.
-		if (saved === null && tasks.error) {
-			error.value = tasks.error;
-
-			return;
+		// Saved on the device, so this cannot fail for want of a connection. The
+		// server hears about it on the next sync.
+		if (editing.value) {
+			await tasks.update(id.value, body());
+		} else {
+			await tasks.create(body());
 		}
 
 		await router.push('/');
-	} catch (failure) {
-		if (failure.status === 422) {
-			fieldErrors.value = failure.data?.errors ?? {};
-		} else {
-			await endSession();
-		}
 	} finally {
 		busy.value = false;
 	}
@@ -123,15 +105,8 @@ async function submit() {
 async function destroy() {
 	confirmingDelete.value = false;
 
-	try {
-		if (await tasks.remove(id.value)) {
-			await router.push('/');
-		} else {
-			error.value = tasks.error || 'Could not delete that task.';
-		}
-	} catch {
-		await endSession();
-	}
+	await tasks.remove(id.value);
+	await router.push('/');
 }
 </script>
 
@@ -143,13 +118,31 @@ async function destroy() {
 			<div class="field">
 				<label for="title">Title</label>
 				<input id="title" v-model="title" name="title" type="text" maxlength="255" />
-				<p v-if="fieldErrors.title" class="field__error">{{ fieldErrors.title[0] }}</p>
 			</div>
 
 			<div class="field">
 				<label for="notes">Notes</label>
 				<textarea id="notes" v-model="notes" name="notes"></textarea>
-				<p v-if="fieldErrors.notes" class="field__error">{{ fieldErrors.notes[0] }}</p>
+			</div>
+
+			<!--
+				An estimate, so the box is left empty rather than defaulted to a
+				number nobody chose. `step="5"` only sets what the spinner jumps by
+				— any whole number of minutes is still accepted.
+			-->
+			<div class="field">
+				<label for="duration">Duration</label>
+				<input
+					id="duration"
+					v-model="duration"
+					name="duration"
+					type="number"
+					min="0"
+					step="5"
+					inputmode="numeric"
+					aria-describedby="duration-unit"
+				/>
+				<p id="duration-unit" class="text-meta">Minutes</p>
 			</div>
 
 			<!--
@@ -159,8 +152,6 @@ async function destroy() {
 			<div class="field">
 				<label for="due_date">Due</label>
 				<input id="due_date" v-model="dueDate" name="due_date" type="date" />
-
-				<p v-if="fieldErrors.due_at" class="field__error">{{ fieldErrors.due_at[0] }}</p>
 			</div>
 
 			<p v-if="error" class="error">{{ error }}</p>

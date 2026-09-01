@@ -1,60 +1,80 @@
 import { computed, ref, watch } from 'vue';
 import { defineStore } from 'pinia';
 
+import { createKv, memoryKv } from '@/lib/kv';
+import { createOfflineStore } from '@/lib/offlineStore';
+import { createTasksRemote } from '@/lib/tasksRemote';
 import { isCompleted, isOpen, listTasks, sortCompleted } from '@/lib/taskSort';
 import { readCompletedShown, writeCompletedShown } from '@/lib/completedPreference';
+import { useSessionStore } from '@/stores/session';
 
 /*
- * The remote is injected rather than imported. That is the seam that keeps view
- * tests fast and network-free: tests hand this a fake, main.js installs the
- * real one at boot.
+ * One database, two object stores: the tasks themselves and the queue of writes
+ * waiting to reach the server. Its own name keeps it clear of the sibling apps
+ * sharing an origin.
  */
-let remote = null;
+const DB = 'coevta-tasks';
 
-export function useRemote(value) {
-	remote = value;
+/*
+ * The durable store is injected rather than imported. That is the seam that
+ * keeps tests fast and storage-free: tests hand this a fake, main.js installs
+ * the real IndexedDB-backed one at boot.
+ */
+let offline = null;
+
+export function useOfflineStore(value) {
+	offline = value;
+
+	return offline;
 }
 
 /**
- * A 401 means the session is gone, and only the session layer can act on that.
- * Every action rethrows it instead of folding it into `error`.
+ * The same seam, entered one layer lower: a test that only wants to control
+ * what the server says gets the real durable layer over throwaway memory.
  */
-function isUnauthorized(failure) {
-	return failure?.status === 401;
+export function useRemote(remote) {
+	return useOfflineStore(
+		createOfflineStore({ kv: memoryKv(), outboxKv: memoryKv(), remote }),
+	);
 }
 
-/**
- * A 422 names the fields it rejected, and only the form showing those fields
- * can act on that. Folding it into a general error message would strip the
- * detail and leave the user guessing which field was wrong.
- */
-function isValidation(failure) {
-	return failure?.status === 422;
+export function createTasksOfflineStore() {
+	const session = useSessionStore();
+
+	return createOfflineStore({
+		kv: createKv(DB, 'tasks'),
+		outboxKv: createKv(DB, 'outbox'),
+		remote: createTasksRemote({ api: session.api }),
+		onUnauthorized: () => {
+			session.setToken(null);
+		},
+	});
 }
 
 export const useTasksStore = defineStore('tasks', () => {
 	const tasks = ref([]);
-	// Starts true: nothing has been loaded yet, and starting false would flash
-	// "no tasks yet" at the user for one frame before the first load resolves.
+	// Starts true: nothing has been read yet, and starting false would flash
+	// "no tasks yet" at the user for one frame before the first read resolves.
 	const loading = ref(true);
-	// Distinguishes "the account has no tasks" from "we never got an answer" —
-	// otherwise a failed first load renders an empty state that is a guess.
+	// Set once the device has been read. Unlike the online version this is not a
+	// question of whether the server answered — it always resolves, so an empty
+	// list is a fact rather than a guess.
 	const loaded = ref(false);
+	const syncing = ref(false);
+	// Hard problems the user may need to act on: a change the server refused.
 	const error = ref('');
+	// Not a problem — an explanation. Being offline is the app working.
+	const notice = ref('');
+	const unauthorized = ref(false);
+	const pendingCount = ref(0);
+	const pendingIds = ref([]);
 
 	/*
-	 * The clock every row's state is measured against, refreshed on every load.
+	 * The clock every row's state is measured against, refreshed on every read.
 	 * It is state rather than a `new Date()` read per row so that two rows
 	 * rendered in the same pass cannot disagree about where "today" ends.
 	 */
 	const now = ref(new Date());
-
-	/*
-	 * Bumped by every load and by forget(). A response whose ticket is stale has
-	 * been overtaken and is dropped: without this, a slow first request landing
-	 * after a fast second one would put the older list back on screen.
-	 */
-	let generation = 0;
 
 	/*
 	 * A display preference rather than server state, but it lives here because
@@ -70,175 +90,156 @@ export const useTasksStore = defineStore('tasks', () => {
 	// pushed into a section of their own.
 	const visible = computed(() => listTasks(tasks.value, { completed: completedShown.value }));
 
-	function replaceLocal(task) {
-		const at = tasks.value.findIndex((held) => held.id === task.id);
+	const isPending = (id) => pendingIds.value.includes(id);
 
-		if (at === -1) {
-			tasks.value = [...tasks.value, task];
-		} else {
-			tasks.value = tasks.value.map((held) => (held.id === task.id ? task : held));
+	function store() {
+		if (!offline) {
+			offline = createTasksOfflineStore();
 		}
+
+		return offline;
 	}
 
-	/**
-	 * Empties the store. Called when a session ends: this device is shared, and
-	 * without it the next person to sign in sees the previous account's tasks
-	 * rendered from memory until their own load resolves.
-	 */
-	function forget() {
-		generation += 1;
-		tasks.value = [];
-		loaded.value = false;
-		loading.value = true;
-		error.value = '';
+	async function readPending() {
+		pendingCount.value = await store().pendingCount();
+		pendingIds.value = await store().pendingIds();
+	}
+
+	async function readLocal() {
+		tasks.value = await store().cached();
+		now.value = new Date();
+		await readPending();
 	}
 
 	async function load() {
-		const ticket = (generation += 1);
-		loading.value = true;
+		await readLocal();
+		loaded.value = true;
+		loading.value = false;
+	}
+
+	/**
+	 * Push local work first, then pull. The other order would refresh away an
+	 * edit that has not left the device yet.
+	 */
+	async function syncNow() {
+		syncing.value = true;
+		notice.value = '';
 
 		try {
-			const list = await remote.listAll();
+			const result = await store().flush();
 
-			if (ticket !== generation) {
+			if (result.rejected.length) {
+				// The user made these edits. Losing them quietly would be worse
+				// than saying so.
+				error.value = `${result.rejected.length} change${
+					result.rejected.length === 1 ? '' : 's'
+				} could not be saved and ${result.rejected.length === 1 ? 'was' : 'were'} dropped.`;
+			}
+
+			const refreshed = await store().refresh();
+
+			// null means 401: an expired session is not a connection problem and
+			// must not be reported as one.
+			if (refreshed === null) {
+				unauthorized.value = true;
+
 				return;
 			}
-
-			tasks.value = list;
-			now.value = new Date();
-			loaded.value = true;
-			error.value = '';
-		} catch (failure) {
-			if (isUnauthorized(failure)) {
-				throw failure;
-			}
-
-			if (ticket !== generation) {
-				return;
-			}
-
-			// Deliberately not clearing `tasks`: showing the last known list with
-			// a warning beats showing an empty screen. On a first load there is
-			// nothing to show, so the message must not claim otherwise.
-			error.value = loaded.value
-				? 'Could not reach the server. Showing the tasks I last loaded.'
-				: 'Could not reach the server.';
+		} catch {
+			notice.value = 'No connection. Showing the tasks saved on this device.';
 		} finally {
-			if (ticket === generation) {
-				loading.value = false;
-			}
+			await readLocal();
+			loaded.value = true;
+			loading.value = false;
+			syncing.value = false;
 		}
 	}
 
 	/**
-	 * Runs a write, converting any failure into a message the views can show.
-	 * Returns whether it succeeded — separately from what it returned, because
-	 * an empty 204 body is a success that looks exactly like a failure.
-	 */
-	async function attempt(action, message, { surfaceValidation = false } = {}) {
-		try {
-			error.value = '';
-
-			return { ok: true, value: await action() };
-		} catch (failure) {
-			// Only the form asks for validation errors, because only the form has
-			// fields to hang them on. Rethrowing to a checkbox handler would give
-			// an unhandled rejection and a click that does nothing.
-			if (isUnauthorized(failure) || (surfaceValidation && isValidation(failure))) {
-				throw failure;
-			}
-
-			error.value = message;
-
-			return { ok: false, value: null };
-		}
-	}
-
-	/**
-	 * Applies the record the server returned. If it answered without one, the
-	 * new state is unknown — ask for it rather than guess, or the user clicks
-	 * and watches nothing happen.
-	 */
-	async function applyResult({ ok, value }) {
-		if (!ok) {
-			return null;
-		}
-
-		if (value) {
-			replaceLocal(value);
-
-			return value;
-		}
-
-		await load();
-
-		return null;
-	}
-
-	/**
-	 * One task, for a deep link into the form before the list has loaded.
-	 * Prefers what is already held — a task opened from the list should not
-	 * cost a request.
+	 * One task, for a deep link into the form. Prefers what is already held —
+	 * a task opened from the list should not cost anything — and syncs only for
+	 * a link that arrived before this device had ever read the list.
 	 */
 	async function fetchOne(id) {
-		const held = tasks.value.find((task) => task.id === id);
+		const held = tasks.value.find((task) => task.id === id) ?? (await store().get(id));
 
 		if (held) {
 			return held;
 		}
 
-		const { value } = await attempt(() => remote.get(id), 'Could not load that task.');
+		await syncNow();
 
-		if (value) {
-			replaceLocal(value);
-		}
-
-		return value;
+		return tasks.value.find((task) => task.id === id) ?? null;
 	}
 
 	async function create(body) {
-		return applyResult(
-			await attempt(() => remote.create(body), 'Could not save that task.', {
-				surfaceValidation: true,
-			}),
-		);
+		const record = await store().create(body);
+
+		await readLocal();
+
+		return record;
 	}
 
 	async function update(id, body) {
-		return applyResult(
-			await attempt(() => remote.update(id, body), 'Could not save that change.', {
-				surfaceValidation: true,
-			}),
-		);
+		const record = await store().update(id, body);
+
+		await readLocal();
+
+		return record;
 	}
 
 	async function complete(id) {
-		// The server stamps completed_at, so the record it returns is the truth —
-		// guessing the timestamp here would put the row in the wrong order.
-		return applyResult(await attempt(() => remote.complete(id), 'Could not complete that task.'));
+		const record = await store().complete(id);
+
+		await readLocal();
+
+		return record;
 	}
 
 	async function reopen(id) {
-		return applyResult(await attempt(() => remote.reopen(id), 'Could not reopen that task.'));
+		const record = await store().reopen(id);
+
+		await readLocal();
+
+		return record;
 	}
 
 	async function remove(id) {
-		const { ok } = await attempt(() => remote.remove(id), 'Could not delete that task.');
+		await store().remove(id);
 
-		if (ok) {
-			// Filtered after the await, not before: a refresh that landed during
-			// the round-trip would otherwise be silently rolled back.
-			tasks.value = tasks.value.filter((task) => task.id !== id);
-		}
+		await readLocal();
 
-		return ok;
+		return true;
+	}
+
+	/**
+	 * Empties everything, cache and queue alike. Called when a session ends:
+	 * this device is shared, and without it the next person to sign in reads the
+	 * previous account's tasks straight off the disk.
+	 */
+	async function forget() {
+		await store().clear();
+
+		tasks.value = [];
+		loaded.value = false;
+		loading.value = true;
+		error.value = '';
+		notice.value = '';
+		unauthorized.value = false;
+		await readPending();
 	}
 
 	return {
 		tasks,
 		loading,
 		loaded,
+		syncing,
 		error,
+		notice,
+		unauthorized,
+		pendingCount,
+		pendingIds,
+		isPending,
 		now,
 		open,
 		completed,
@@ -246,6 +247,7 @@ export const useTasksStore = defineStore('tasks', () => {
 		completedShown,
 		forget,
 		load,
+		syncNow,
 		fetchOne,
 		create,
 		update,

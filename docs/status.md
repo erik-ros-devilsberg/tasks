@@ -7,3 +7,4 @@ Maintained by the agile plugin. One row per sprint — updated by `/agile:shape`
 | App Foundation and Sign-In | app-foundation-and-sign-in | done | Build scaffold, shared stylesheet and token-based sign-in. |
 | Tasks On Screen | tasks-on-screen | done | Task API client, ordering rules and the grouped task list. |
 | Managing Tasks | managing-tasks | done | Complete, create, edit, delete, and review completed tasks. |
+| Duration, and an App That Works Offline | duration-and-offline-install | done | Optional duration in minutes; offline-first storage, sync queue and Android install. |

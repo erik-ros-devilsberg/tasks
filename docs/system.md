@@ -6,9 +6,12 @@ This file is maintained by `/agile:wrap-sprint`. Read this to understand the sys
 ## What this is
 
 A Vue 3 SPA for managing tasks against the [coevta server](../server). Pure API client — the
-app ships no backend and no database. It is an **online** client: every read and write goes
-to the server as it happens. The offline layer the sibling contacts app has (IndexedDB,
-outbox, sync drain) is deliberately not built here; see "Decisions" below.
+app ships no backend and no database.
+
+It is **offline-first and installable**. The device is the source of truth for reads; every
+write is applied locally and queued, and the network is a background concern. It installs on
+Android as a standalone app. See "Decisions" below — this reverses the position the project
+started from.
 
 ## Stack
 
@@ -22,7 +25,7 @@ indentation everywhere.
 ## Layers
 
 ```
-views/  →  stores/  →  lib/
+views/  →  stores/tasks.js  →  lib/offlineStore.js  →  lib/{kv,outbox,sync}.js  →  lib/tasksRemote.js
 ```
 
 - **`lib/`** is framework-free — no Vue, no Pinia imports. Unit-testable without a DOM.
@@ -99,36 +102,87 @@ becomes UTC midnight, which renders as the 29th anywhere west of Greenwich.
 
 `completed_at` is the exception — a real instant stamped by the server, only ever compared.
 
+### The offline layer — `lib/{kv,outbox,sync,offlineStore}.js`
+
+Ported from `../contacts` and extended for the one way tasks differ: completion is its own
+endpoint, so it needs its own operations.
+
+**`kv.js`** — storage narrowed to six methods: `get/set/del/all/keys/clear`. Two adapters
+satisfy it, IndexedDB and a plain `Map`, which is why every layer above is unit-tested
+without a DOM. It hands back clones in both directions, so a view that edits what it
+rendered cannot rewrite the cache behind the store's back. It falls back to memory rather
+than throwing: a private window should still get a working app for the session. Both object
+stores are created on the one upgrade — creating the second lazily would need a version bump
+on a database the first had already opened.
+
+**`outbox.js`** — the durable, ordered queue. Coalescing happens **at enqueue**, while both
+operations are still in hand: eight offline edits to one task are one request. Five types —
+`create`, `update`, `delete`, `complete`, `reopen`.
+
+- `delete` cancels everything queued for the record, and cancels itself too when the record
+  was only ever created locally — the server never heard of it.
+- `update` folds into a pending `create`, or merges into a pending `update`. **Merged, not
+  replaced** — unlike contacts, whose payload is a full `PUT` body. Ours is a `PATCH` body,
+  so a narrower second edit must not drop the keys the first carried.
+- `complete`/`reopen` fold into a pending `create` by setting `completed_at` in its payload;
+  otherwise they replace any pending completion for that record, so ticking and unticking a
+  box converges on one call.
+- An operation flagged `sending` is never coalesced into. Its payload has already left.
+- The sequence lives in storage, not in a counter in memory — a reload must continue it
+  rather than restart it and reorder the queue.
+
+**`sync.js`** — the drain, behind a single in-flight promise, because start-up and the
+`online` event routinely fire together. Failure policy: `401` stops and keeps the queue;
+`404` on anything but a create reconciles locally; `422` is dropped **and reported**, because
+a poison operation would otherwise block everything behind it forever; anything else stops
+rather than skips, so ordering holds.
+
+**`offlineStore.js`** — the device as source of truth. `local-` ids for records created
+offline, remapped when the create syncs so an edit made in flight does not 404. `refresh()`
+skips records with queued work **in both directions**: upserting one would overwrite an
+offline edit with the server's stale copy, and deleting one would remove a record the server
+has never heard of.
+
+Two rules specific to tasks:
+
+- **An `update` payload never carries `completed_at`.** `withoutCompletion()` strips it. This
+  is the sharp edge of the whole design: an edit that mentions the field will reopen a
+  finished task the moment it coalesces with an earlier one.
+- **Completing offline stamps the moment the box was ticked**, not the moment a connection
+  returned — that is when the user finished the task, and it keeps the list in a sensible
+  order meanwhile. The stamp is a placeholder; the server writes its own on sync and that one
+  wins.
+
 ### `stores/tasks.js`
 
-The reactive layer. The remote is **injected** through `useRemote()`, never imported, which is
-what lets view tests hand it a fake.
+The reactive layer over the offline store, which is **injected** through `useOfflineStore()`,
+never imported — that seam is what lets tests hand it a fake and never touch IndexedDB.
+`useRemote()` enters the same seam one layer lower, wrapping a fake remote in the real
+durable layer over throwaway memory.
 
-State: `tasks`, `loading`, `loaded`, `error`, `now`. Derived: `open`, `completed`, `groups`.
+State: `tasks`, `loading`, `loaded`, `syncing`, `error`, `notice`, `unauthorized`,
+`pendingCount`, `pendingIds`, `now`. Derived: `open`, `completed`, `visible`, `isPending`.
 
-- `loading` starts **true** — starting false flashes "no tasks yet" for a frame before the
-  first load resolves.
-- `loaded` distinguishes "this account has no tasks" from "we never got an answer". Without
-  it a failed first load renders an empty state that is a guess.
-- `now` is state, refreshed on every load, rather than a `new Date()` inside the computed.
-  That is what stops the grouping and the per-row overdue marker disagreeing — a row must
-  never carry an "Overdue" badge while sitting under the "Today" heading.
-- A **generation counter** discards responses that have been overtaken. Without it a slow
-  first request landing after a fast second one puts the older list back on screen.
-- **`forget()`** empties everything and is called on sign-out and on a `401`. This device is
-  shared; without it the next person to sign in sees the previous account's tasks rendered
-  from memory until their own load resolves.
-- Writes go through `attempt()`, which reports success **separately** from the returned value
-  — an empty `204` body is a success that otherwise looks identical to a failure. When a write
-  succeeds without a body the store reloads rather than guessing, so a click can never
-  silently do nothing.
-- A failed write leaves the list exactly as it was. A failed `load()` keeps the last known
-  tasks on screen with a warning.
-- A `401` is rethrown by every action rather than folded into `error` — only the session layer
-  can act on it. A **`422` is rethrown for the same reason**: it names the fields it rejected,
-  and only the form showing those fields can use that detail.
-- `fetchOne(id)` prefers what is already held, so opening a task from the list costs no
-  request; it fetches only for a deep link that arrived before the list.
+- `load()` reads the device. `syncNow()` **pushes before it pulls** — the other order would
+  refresh away an edit that has not left the device yet.
+- **`error` and `notice` are different things.** An error is a change the server refused and
+  dropped, which the user made and deserves to hear about. A notice is "no connection" — the
+  app working as designed, in the same voice as everything else.
+- `loading` starts **true** — starting false flashes "no tasks yet" for a frame.
+- A `401` raises `unauthorized` rather than throwing. `App.vue` watches it, so it is handled
+  once for every view rather than per view: any screen can be showing when a background sync
+  meets an expired token.
+- **`forget()`** empties the cache *and the queue*, on sign-out and on a `401`. This device is
+  shared.
+- `fetchOne(id)` prefers what is already held, so opening a task from the list costs nothing;
+  it syncs only for a deep link that arrived before this browser ever read the list.
+- The store does **not** auto-push after each write. Syncing happens at defined moments — on
+  mount, on returning to the tab, on `online`, after a list action, and from the menu. An
+  automatic push per write would send eight requests for eight edits and defeat the outbox's
+  coalescing entirely.
+
+Known gap: `now` refreshes on load and on sync, not on a timer. A tab left open past midnight
+keeps yesterday's tasks under "today" until the next sync.
 
 ### `lib/dueFields.js`
 
@@ -156,15 +210,49 @@ the API throws outright in some private-browsing modes, and a stored value can b
 once a user has poked at it. Both failures fall back to hidden — a preference is never worth
 an exception.
 
+### `lib/durationField.js`
+
+Moves `duration` between the API's integer minutes and the string an input holds. It never
+refuses: a duration is an estimate the user volunteered, and losing the rest of a save
+because it was typed oddly would be exactly the "computer says no" the project rules out.
+Junk, blank, zero and negatives all read as `null`; a decimal rounds; the first number in the
+string is taken, so "45 minutes" is 45.
+
+Zero maps to `null` rather than being stored: a 0 in the box claims the task takes no time,
+which is not what the user said.
+
 ### `views/TaskFormView.vue`
 
-Serves both create and edit. It never sends `completed_at`: the store's update is a `PATCH`, so
-omitting the field leaves it alone, and mentioning it at all is how a completed task gets
-silently reopened.
+Serves both create and edit. It never sends `completed_at` — completion has its own
+operations, and mentioning the field in an edit is how a completed task gets silently
+reopened. `duration` is **always present** in the body, never omitted: an absent key leaves a
+`PATCH` field untouched, so clearing the box has to send an explicit `null`.
 
-Failure handling follows the "minimize computer says no" rule — a blank title saves and comes
-back as the server's "Untitled task", a 422 puts the server's messages against the fields with
-everything typed still in place, and a dropped connection leaves the form populated to retry.
+Saving writes to the device and returns to the list immediately. There is no spinner on a
+round-trip that may never happen, and no per-field server errors — a local save cannot be
+refused. A change the server later rejects is reported on the list instead.
+
+### `public/sw.js` and the manifest
+
+Hand-written, not generated. The worker precaches a **literal** list of shell assets and
+`addAll` is atomic, so one stale entry fails the whole install and costs all offline support:
+adding an asset means adding it to `SHELL` *and* bumping `CACHE`. `/api/` is never served
+from the HTTP cache — that data belongs to the offline layer, which would have no way to know
+it was being handed a stale list.
+
+Any navigation falls back to `index.html`, which is what makes a refresh on `/tasks/new` or
+`/tasks/{id}/edit` work offline under `createWebHistory()`.
+
+`vite.config.js` turns off content hashing and emits a single chunk, because a filename the
+hand-written list cannot predict is a route that fails offline. The worker is registered only
+under `import.meta.env.PROD` — the dev server has no `/assets/index.js`, so the atomic
+precache would fail there. Offline behaviour is tested against a real build.
+
+Icons are derived from `docs/tasks.svg`. Two things were changed and both matter: the glyph
+is a path rather than text, so it does not depend on a font being installed on the device;
+and the canvas is opaque Onyx rather than transparent, because a launcher composites an icon
+onto its own wallpaper. `icon-maskable-512.png` draws the mark at ~56% of the canvas so it
+survives Android cropping it to a circle.
 
 ### `router.js`
 
@@ -195,7 +283,11 @@ skip-to-content link, semantic landmarks, and `prefers-reduced-motion` honoured.
 
 ## Testing
 
-Tests live in `/tests` mirroring `src/`, never beside the source. Vitest with
+Tests live in `/tests` mirroring `src/`, never beside the source. `tests/support/server.js`
+holds a small in-memory server shared by the tests that drive a whole sync — a bag of
+unrelated stubs stops working once the app pushes and pulls in one operation, because a
+`listAll` that ignored the `create` it had just accepted would make every round-trip
+assertion lie. Vitest with
 `environment: 'jsdom'` and `globals: false` — everything imported explicitly. `vue-router` is
 mocked with `vi.hoisted` so `push`/`replace` are assertable; the network is stubbed with
 `vi.stubGlobal('fetch', …)`. Store tests call the Pinia store directly with
@@ -216,20 +308,44 @@ invent one. `GET /tasks` returns the whole list in one response (pagination was 
 server-side on 2026-08-31). `PUT` is a full replacement and **omitting `completed_at` reopens
 the task**, so partial edits use `PATCH`. There is no version, ETag or idempotency key:
 conflict resolution is last-write-wins and duplicate creates are possible — accepted
-trade-offs.
+trade-offs, and offline-first widens the window in which they happen.
+
+`duration` is an optional integer number of minutes, `null` when unknown. `replace()` carries
+it, because a `PUT` body that omits it wipes it.
 
 ## Decisions
 
-**Online-only, with the seam left in.** The sibling contacts app is offline-first. This one is
-not, because nothing asked for it. The injection seam between `stores/` and `lib/` is built
-anyway, so an offline store can slot in later without rewriting the views.
+**Offline-first and installable (2026-09-01).** Reverses the original "online-only" decision
+below, on instruction. The seam left in for exactly this took the offline store without any
+view being rewritten around it — the views' change was about *showing* sync state, not about
+where their data comes from.
 
-**No `useOnline` composable.** Its only use here would be a "you need a connection" banner on
-the login screen, and a failed request already says "No connection to the server."
+*Superseded — kept for the reasoning:* "Online-only, with the seam left in. The sibling
+contacts app is offline-first. This one is not, because nothing asked for it." The seam was
+built anyway, and that is the only reason this landed as an addition rather than a rewrite.
 
-**`.conn*` and `.badge-pending` are not carried over.** They signal sync state, which an
-online client has none of. `CLAUDE.md`'s class inventory was trimmed to match what actually
-exists.
+**`useOnline`, `.conn*` and `.badge--pending` are carried over after all.** They signal sync
+state, which this client now has.
+
+**Completion is its own outbox operation, not an update.** Two reasons:
+`POST /tasks/{id}/complete` takes no body and lets the server stamp the authoritative time,
+and an `update` carrying `completed_at` would reopen a finished task the moment it coalesced
+with an earlier edit.
+
+**The checkbox no longer needs its DOM re-synced by hand.** The old online version had to put
+the box back after a failed write, because Vue will not re-patch a prop it believes is
+unchanged. A local write always changes the record, so the binding always changes with it.
+
+**`duration` was built to the agreed contract, not to what the API returns today.** The
+server column was being added in parallel. Unknown fields are ignored rather than rejected,
+so nothing breaks in the meantime.
+
+**No auto-push after a write.** See `stores/tasks.js` above — it would defeat the outbox's
+coalescing.
+
+**Fonts from `fonts.bunny.net` are not precached**, being cross-origin. Offline, the body
+face falls back to the system sans; the wordmark face is vendored and precached, so the brand
+type survives.
 
 **Token in `localStorage` is readable by any XSS on the origin.** Accepted: it matches the
 sibling app, and the server's token endpoint offers no httpOnly-cookie alternative.
@@ -285,7 +401,7 @@ which input was wrong.
 No new CSS class was added in this sprint. The form, the modal and the completed section are
 built entirely from the inventory laid down in sprint 1, which is what that ordering was for.
 
-A second review ran after the sprint was committed and found eight issues, all fixed. The
+A second review ran after this sprint was committed and found eight issues, all fixed. The
 worst was a data-loss path: when the edit form failed to load its task it rendered blank and
 still submittable, so pressing Save PATCHed empty fields over the real record — one transient
 network failure could wipe a task's title, notes and due date. The form now refuses to save a

@@ -20,6 +20,22 @@ export default defineConfig(({ mode }) => ({
 			'@': fileURLToPath(new URL('./src', import.meta.url)),
 		},
 	},
+	build: {
+		// The service worker precaches a literal list of shell assets, so bundle
+		// filenames must stay stable across builds — no content hashes.
+		rollupOptions: {
+			output: {
+				entryFileNames: 'assets/[name].js',
+				chunkFileNames: 'assets/[name].js',
+				assetFileNames: 'assets/[name][extname]',
+				// One bundle, not per-route chunks. A chunk that is not in the
+				// precache list is a route that fails offline, and keeping a
+				// generated list in sync with a hand-written service worker is
+				// exactly the kind of thing nobody remembers to do.
+				manualChunks: () => 'index',
+			},
+		},
+	},
 	server: {
 		port: 8043,
 		strictPort: true,

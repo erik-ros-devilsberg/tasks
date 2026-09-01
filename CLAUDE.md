@@ -43,10 +43,26 @@ Version lives in `version.json` at the project root, injected into the build as
 `__APP_VERSION__` via a Vite `define`. The Vitest config mirrors that define so tests
 resolve it the same way.
 
-Dev server proxies `/api` to the coevta server (`http://127.0.0.1:8040` by default —
-`composer dev` in `../server`), overridable with `VITE_SERVER_URL` in `.env.local`. The app
-always calls `/api/v1/*` relatively so production can serve it from the server's origin
-with no proxy at all.
+Dev server runs on port **8043** (`strictPort`), and proxies `/api` to the coevta server
+(`http://127.0.0.1:8040` by default — `composer dev` in `../server`), overridable with
+`VITE_SERVER_URL` in `.env.local`.
+
+**The API base is a build-time value, not a fixed relative path.** `API_BASE` in
+`lib/api.js` reads `VITE_API_BASE_URL` and falls back to `/api/v1`:
+
+- **Development** — leave it unset. Calls go to `/api/v1/*` relatively and the proxy above
+  answers, which also keeps the browser same-origin.
+- **Production** — the API lives on its own host, so set it for the build, version segment
+  included and no trailing slash:
+  `VITE_API_BASE_URL=https://api.example.com/api/v1 npm run build`.
+
+It is baked into the bundle, so a different API host means a different build. The client
+authenticates with a bearer token rather than a cookie, so a cross-origin API needs CORS on
+the server (`Authorization` among the allowed headers) but not credentialed requests.
+
+The build output is `dist/`. A web server points its document root there and needs an SPA
+fallback to `index.html` — the router uses `createWebHistory()`, so `/tasks/new` and
+`/tasks/{id}/edit` have no file behind them and a refresh on either 404s without it.
 
 ---
 
@@ -161,7 +177,8 @@ Carried over from `../contacts` — reach for these before writing anything new:
 **Forms & actions:** `.form` `.form__actions` `.field` `.field__error` `.field--inline`
 `.btn` `.btn--primary` `.btn--ghost` `.btn--danger` `.btn--sm` `.modal` `.modal__dialog`
 `.modal__actions`
-**State:** `.error` `.notice` `.is-overdue` `.badge` `.badge--overdue`
+**State:** `.error` `.notice` `.is-overdue` `.badge` `.badge--overdue` `.badge--pending`
+`.conn` `.conn--offline`
 **Utilities:** `.text-muted` `.text-meta` `.text-preline` `.visually-hidden` `.mt-2`
 `.stack`
 
@@ -215,6 +232,13 @@ TDD is mandatory — tests first, then implement.
 - The PUT-is-replacement trap in §7 — a save must send a complete body.
 - `due_at` granularity: a date-only value stays date-only, a datetime stays a datetime.
 - Overdue / open / completed classification and ordering.
+- Every offline path: create, edit, complete, reopen and delete with no connection; the
+  queue surviving a reload; coalescing; and each failure policy in §8.
+- That an edit never carries `completed_at`, in the store *and* on the wire.
+
+Tests share `tests/support/server.js` — a small in-memory server rather than a bag of
+stubs, because a sync pushes and pulls in one operation and a `listAll` that ignored its own
+`create` would make every round-trip assertion lie.
 
 ---
 
@@ -241,6 +265,7 @@ the server is authoritative.
 | `title` | string | max 255; blank/missing → `"Untitled task"` |
 | `notes` | string\|null | |
 | `due_at` | date or datetime \| null | echoed in the granularity given — `YYYY-MM-DD` or ISO 8601 UTC |
+| `duration` | integer\|null | minutes the task is expected to take. Optional; `null` = no estimate |
 | `completed_at` | datetime\|null | ISO 8601 UTC; **`null` = open**. There is no `status` field |
 
 Auth: `POST /login` → `{ token }`; `POST /logout` revokes only the token used;
@@ -273,16 +298,42 @@ compared, never re-displayed as a wall-clock promise.
 
 ---
 
-## 8. Open decision — offline layer
+## 8. Offline first — decided
 
-`../contacts` is an offline-first installable PWA: IndexedDB via a narrow `kv` interface, a
-durable coalescing outbox, a serialized sync drain, `local-` temporary ids. That machinery
-is real and reusable (`../contacts/src/lib/{kv,outbox,sync,store}.js`) but it is **not yet a
-requirement here**.
+**This app works with no connection, and installs on Android.** Decided 2026-09-01,
+reversing the "plain online client" position this project started from.
 
-Until a human decides otherwise, this app is a **plain online API client** — Pinia over a
-`lib/tasksRemote.js`, with the same injection seam so the offline store can slot in later
-without rewriting the views. Record the decision in `docs/system.md` when it is made.
+The device is the source of truth for reads. Every write is applied locally and queued;
+nothing in a view ever waits on the network. The machinery mirrors `../contacts`:
+
+```
+views/ → stores/tasks.js → lib/offlineStore.js → lib/{kv,outbox,sync}.js → lib/tasksRemote.js
+```
+
+- **`lib/kv.js`** — storage narrowed to six methods. IndexedDB in the browser, a `Map` in
+  tests; falls back to memory rather than throwing.
+- **`lib/outbox.js`** — the durable ordered queue, coalescing at enqueue. Five operation
+  types: `create`, `update`, `delete`, `complete`, `reopen`.
+- **`lib/sync.js`** — the drain. One in-flight promise; `401` stops and keeps the queue,
+  `404` on a non-create reconciles locally, `422` is dropped and reported, anything else
+  stops rather than skips so ordering holds.
+- **`lib/offlineStore.js`** — `local-` ids, remapped when a create syncs.
+
+**The rule that keeps completion safe: an `update` payload must never carry
+`completed_at`.** Completion has its own two operations and its own endpoint. An edit that
+mentions `completed_at` will reopen a finished task the moment the outbox coalesces it with
+an earlier one.
+
+Installability lives in `public/manifest.webmanifest` and the hand-written `public/sw.js`.
+The worker precaches a **literal** list of shell assets and `addAll` is atomic — adding an
+asset means adding it to `SHELL` *and* bumping `CACHE`. That is also why `vite.config.js`
+turns off content hashing and emits a single chunk: a filename the list cannot predict is a
+route that fails offline. `/api/` is never served from the HTTP cache — that data belongs to
+the offline layer.
+
+The worker is registered only in `import.meta.env.PROD`; the dev server has no
+`/assets/index.js`, so the atomic precache would fail. Test offline behaviour against a real
+build: `npm run build && npm run preview`.
 
 ---
 

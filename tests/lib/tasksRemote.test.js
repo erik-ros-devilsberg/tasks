@@ -18,6 +18,7 @@ const task = (id, over = {}) => ({
 	title: `Task ${id}`,
 	notes: null,
 	due_at: null,
+	duration: null,
 	completed_at: null,
 	...over,
 });
@@ -126,8 +127,50 @@ describe('update', () => {
 			title: 'Task 1',
 			notes: null,
 			due_at: null,
+			duration: null,
 			completed_at: '2026-08-30T10:00:00.000000Z',
 		});
+	});
+
+	it('carries duration through a replacement, which would otherwise wipe it', async () => {
+		// PUT is a full replacement: a field left out of the body is reset, so an
+		// estimate the user recorded would vanish on the next full save.
+		const estimated = task('1', { duration: 45 });
+		fetchMock.mockResolvedValue(response(200, estimated));
+
+		await remote().replace('1', estimated);
+
+		expect(lastBody().duration).toBe(45);
+	});
+});
+
+describe('duration', () => {
+	it('sends a duration on create and returns what the server stored', async () => {
+		fetchMock.mockResolvedValue(response(201, task('1', { duration: 45 })));
+
+		const created = await remote().create({ title: 'Write docs', duration: 45 });
+
+		expect(lastBody().duration).toBe(45);
+		expect(created.duration).toBe(45);
+	});
+
+	it('clears a duration with an explicit null rather than by omitting the key', async () => {
+		// An absent key leaves a PATCH field unchanged. Only an explicit null
+		// clears it, so "I no longer know how long this takes" has to be said.
+		fetchMock.mockResolvedValue(response(200, task('1', { duration: null })));
+
+		await remote().update('1', { duration: null });
+
+		expect(lastBody()).toHaveProperty('duration', null);
+	});
+
+	it('leaves a duration alone when only the title is patched', async () => {
+		fetchMock.mockResolvedValue(response(200, task('1', { title: 'Renamed', duration: 45 })));
+
+		const saved = await remote().update('1', { title: 'Renamed' });
+
+		expect(lastBody()).not.toHaveProperty('duration');
+		expect(saved.duration).toBe(45);
 	});
 });
 

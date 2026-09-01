@@ -43,6 +43,7 @@ export function createTasksRemote({ api }) {
 				title: task.title,
 				notes: task.notes,
 				due_at: task.due_at,
+				duration: task.duration,
 				completed_at: task.completed_at,
 			}),
 

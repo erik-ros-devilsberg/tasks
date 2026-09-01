@@ -402,6 +402,35 @@
 	color: var(--hot-fuchsia);
 }
 
+/*
+ * Not a warning. The change is saved — this says only that the server has not
+ * been told yet, which is why the same task may look different elsewhere for
+ * now. Amber rather than fuchsia, because nothing is wrong.
+ */
+.badge--pending {
+	border-color: var(--row-today);
+	color: var(--row-today);
+}
+
+/*
+ * The connection strip, under the nav. Being offline is the app working as
+ * designed, so it is stated in the same voice as everything else rather than
+ * dressed up as an error.
+ */
+.conn {
+	padding: 0.4rem var(--container-pad);
+	background: var(--field-bg);
+	border-bottom: 1px solid var(--border);
+	color: var(--gray-mid);
+	font-size: 0.8rem;
+	text-align: center;
+}
+
+.conn--offline {
+	background: var(--grey-dark);
+	color: var(--ghost-white);
+}
+
 @media (max-width: 400px) {
 	.modal__dialog {
 		padding: 1.25rem;

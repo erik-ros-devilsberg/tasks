@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia';
 
 import TaskFormView from '@/views/TaskFormView.vue';
 import { useRemote, useTasksStore } from '@/stores/tasks';
+import { fakeServer, failing, task } from '../support/server';
 
 const { pushMock, replaceMock, routeRef } = vi.hoisted(() => ({
 	pushMock: vi.fn(),
@@ -16,38 +17,24 @@ vi.mock('vue-router', () => ({
 	RouterLink: { template: '<a><slot /></a>' },
 }));
 
-const task = (id, over = {}) => ({
-	id,
-	title: `Task ${id}`,
-	notes: null,
-	due_at: null,
-	completed_at: null,
-	...over,
-});
+/**
+ * `prime` decides whether the device has already seen the server's list. Off is
+ * how a deep link arrives on a browser that has never opened the app.
+ */
+async function mountForm(remote = fakeServer(), existing = [], { prime = true } = {}) {
+	for (const record of existing) {
+		remote.records.set(record.id, record);
+	}
 
-function fakeRemote(over = {}) {
-	return {
-		listAll: vi.fn().mockResolvedValue([]),
-		get: vi.fn(),
-		create: vi.fn((body) => Promise.resolve({ ...task('new'), ...body })),
-		update: vi.fn((id, body) => Promise.resolve({ ...task(id), ...body })),
-		replace: vi.fn(),
-		complete: vi.fn(),
-		reopen: vi.fn(),
-		remove: vi.fn().mockResolvedValue(null),
-		...over,
-	};
-}
-
-async function mountForm(remote = fakeRemote(), existing = []) {
 	const pinia = createPinia();
 	setActivePinia(pinia);
 	useRemote(remote);
 
 	const store = useTasksStore();
-	store.tasks = existing;
-	store.loaded = true;
-	store.loading = false;
+
+	if (prime) {
+		await store.syncNow();
+	}
 
 	const wrapper = mount(TaskFormView, {
 		global: { plugins: [pinia], stubs: { RouterLink: true } },
@@ -64,8 +51,13 @@ async function submit(wrapper) {
 	await flushPromises();
 }
 
-const failure = (status, data = null) =>
-	Object.assign(new Error(`Request failed (${status}).`), { status, data });
+const editing = (id = '1') => {
+	routeRef.value = { params: { id }, query: {} };
+};
+
+/** What the form saved, as it reached the server. */
+const sentCreate = (remote) => remote.create.mock.calls[0][0];
+const sentUpdate = (remote) => remote.update.mock.calls[0][1];
 
 beforeEach(() => {
 	routeRef.value = { params: {}, query: {} };
@@ -78,37 +70,136 @@ afterEach(() => {
 });
 
 describe('creating a task', () => {
-	it('sends what was typed and returns to the list', async () => {
-		const { wrapper, remote } = await mountForm();
+	it('saves what was typed and returns to the list', async () => {
+		const { wrapper, store, remote } = await mountForm();
 
 		await field(wrapper, 'title').setValue('Buy milk');
 		await field(wrapper, 'notes').setValue('Semi-skimmed');
 		await submit(wrapper);
 
-		expect(remote.create).toHaveBeenCalledWith(
-			expect.objectContaining({ title: 'Buy milk', notes: 'Semi-skimmed' }),
-		);
+		expect(store.tasks.map((t) => t.title)).toEqual(['Buy milk']);
 		expect(pushMock).toHaveBeenCalledWith('/');
+
+		await store.syncNow();
+
+		expect(sentCreate(remote)).toMatchObject({ title: 'Buy milk', notes: 'Semi-skimmed' });
+	});
+
+	it('returns to the list without waiting for the server', async () => {
+		// The task is on the device the moment Save is pressed. Making the user
+		// watch a spinner for a round-trip that may never happen is the thing
+		// offline-first exists to stop.
+		const { wrapper, remote } = await mountForm();
+
+		await field(wrapper, 'title').setValue('Buy milk');
+		await submit(wrapper);
+
+		expect(pushMock).toHaveBeenCalledWith('/');
+		expect(remote.create).not.toHaveBeenCalled();
 	});
 
 	it('saves a blank title rather than refusing — the server names it "Untitled task"', async () => {
-		const create = vi.fn().mockResolvedValue(task('new', { title: 'Untitled task' }));
-		const { wrapper, remote } = await mountForm(fakeRemote({ create }));
+		const { wrapper, store, remote } = await mountForm();
 
 		await submit(wrapper);
 
-		expect(remote.create).toHaveBeenCalledOnce();
-		expect(remote.create.mock.calls[0][0].title).toBe('');
 		expect(pushMock).toHaveBeenCalledWith('/');
+
+		await store.syncNow();
+
+		expect(sentCreate(remote).title).toBe('');
 	});
 
 	it('sends no due date when none was given', async () => {
-		const { wrapper, remote } = await mountForm();
+		const { wrapper, store, remote } = await mountForm();
 
 		await field(wrapper, 'title').setValue('Someday');
 		await submit(wrapper);
+		await store.syncNow();
 
-		expect(remote.create.mock.calls[0][0].due_at).toBeNull();
+		expect(sentCreate(remote).due_at).toBeNull();
+	});
+});
+
+describe('the duration', () => {
+	it('offers a field in minutes, because that is the unit the record stores', async () => {
+		const { wrapper } = await mountForm();
+
+		expect(field(wrapper, 'duration').exists()).toBe(true);
+		expect(field(wrapper, 'duration').attributes('type')).toBe('number');
+	});
+
+	it('saves the minutes that were typed', async () => {
+		const { wrapper, store, remote } = await mountForm();
+
+		await field(wrapper, 'title').setValue('Write docs');
+		await field(wrapper, 'duration').setValue('45');
+		await submit(wrapper);
+		await store.syncNow();
+
+		expect(sentCreate(remote).duration).toBe(45);
+	});
+
+	it('sends no duration when the field is left empty, rather than zero', async () => {
+		const { wrapper, store, remote } = await mountForm();
+
+		await field(wrapper, 'title').setValue('Someday');
+		await submit(wrapper);
+		await store.syncNow();
+
+		expect(sentCreate(remote).duration).toBeNull();
+	});
+
+	it('loads a stored duration back into the field', async () => {
+		editing();
+		const { wrapper } = await mountForm(fakeServer(), [task('1', { duration: 45 })]);
+
+		expect(field(wrapper, 'duration').element.value).toBe('45');
+	});
+
+	it('leaves the field blank for a task with no estimate, not showing a 0', async () => {
+		editing();
+		const { wrapper } = await mountForm(fakeServer(), [task('1')]);
+
+		expect(field(wrapper, 'duration').element.value).toBe('');
+	});
+
+	it('clears a duration with an explicit null, since an absent key would keep it', async () => {
+		editing();
+		const { wrapper, store, remote } = await mountForm(fakeServer(), [task('1', { duration: 45 })]);
+
+		await field(wrapper, 'duration').setValue('');
+		await submit(wrapper);
+		await store.syncNow();
+
+		expect(sentUpdate(remote)).toHaveProperty('duration', null);
+	});
+
+	it('keeps a duration an edit never touched', async () => {
+		editing();
+		const { wrapper, store, remote } = await mountForm(fakeServer(), [task('1', { duration: 45 })]);
+
+		await field(wrapper, 'title').setValue('Renamed');
+		await submit(wrapper);
+		await store.syncNow();
+
+		expect(sentUpdate(remote).duration).toBe(45);
+	});
+
+	it('saves rather than refusing when the field holds something unreadable', async () => {
+		// "Minimize computer says no": a stray keystroke in an optional estimate
+		// must never cost the user the rest of the form.
+		const { wrapper, store, remote } = await mountForm();
+
+		await field(wrapper, 'title').setValue('Buy milk');
+		await field(wrapper, 'duration').setValue('not a number');
+		await submit(wrapper);
+
+		expect(pushMock).toHaveBeenCalledWith('/');
+
+		await store.syncNow();
+
+		expect(sentCreate(remote)).toMatchObject({ title: 'Buy milk', duration: null });
 	});
 });
 
@@ -121,36 +212,38 @@ describe('the due date', () => {
 	});
 
 	it('sends a date alone as a date, not as a midnight datetime', async () => {
-		const { wrapper, remote } = await mountForm();
+		const { wrapper, store, remote } = await mountForm();
 
 		await field(wrapper, 'due_date').setValue('2026-09-05');
 		await submit(wrapper);
+		await store.syncNow();
 
-		expect(remote.create.mock.calls[0][0].due_at).toBe('2026-09-05');
+		expect(sentCreate(remote).due_at).toBe('2026-09-05');
 	});
 
 	it('clears the due date by sending null', async () => {
-		routeRef.value = { params: { id: '1' }, query: {} };
-		const { wrapper, remote } = await mountForm(fakeRemote(), [
+		editing();
+		const { wrapper, store, remote } = await mountForm(fakeServer(), [
 			task('1', { due_at: '2026-09-05' }),
 		]);
 
 		await field(wrapper, 'due_date').setValue('');
 		await submit(wrapper);
+		await store.syncNow();
 
-		expect(remote.update.mock.calls[0][1].due_at).toBeNull();
+		expect(sentUpdate(remote).due_at).toBeNull();
 	});
 
 	it('loads a date-only due date back into the date field', async () => {
-		routeRef.value = { params: { id: '1' }, query: {} };
-		const { wrapper } = await mountForm(fakeRemote(), [task('1', { due_at: '2026-09-05' })]);
+		editing();
+		const { wrapper } = await mountForm(fakeServer(), [task('1', { due_at: '2026-09-05' })]);
 
 		expect(field(wrapper, 'due_date').element.value).toBe('2026-09-05');
 	});
 
 	it('shows only the day of a task registered with a time', async () => {
-		routeRef.value = { params: { id: '1' }, query: {} };
-		const { wrapper } = await mountForm(fakeRemote(), [
+		editing();
+		const { wrapper } = await mountForm(fakeServer(), [
 			task('1', { due_at: '2026-09-05T14:30:00.000000Z' }),
 		]);
 
@@ -158,49 +251,52 @@ describe('the due date', () => {
 	});
 
 	it('keeps a registered time the form no longer shows, rather than silently dropping it', async () => {
-		routeRef.value = { params: { id: '1' }, query: {} };
-		const { wrapper, remote } = await mountForm(fakeRemote(), [
+		editing();
+		const { wrapper, store, remote } = await mountForm(fakeServer(), [
 			task('1', { due_at: '2026-09-05T14:30:00.000000Z' }),
 		]);
 
 		await field(wrapper, 'title').setValue('Renamed');
 		await submit(wrapper);
+		await store.syncNow();
 
 		// An edit that never touched the due date must not turn "Friday at 14:30"
 		// into "Friday, some time" — the field is gone from the form, not from
 		// the record.
-		expect(remote.update.mock.calls[0][1].due_at).toBe('2026-09-05T14:30:00Z');
+		expect(sentUpdate(remote).due_at).toBe('2026-09-05T14:30:00Z');
 	});
 
 	it('carries the registered time over to a new day when the date is changed', async () => {
-		routeRef.value = { params: { id: '1' }, query: {} };
-		const { wrapper, remote } = await mountForm(fakeRemote(), [
+		editing();
+		const { wrapper, store, remote } = await mountForm(fakeServer(), [
 			task('1', { due_at: '2026-09-05T14:30:00.000000Z' }),
 		]);
 
 		await field(wrapper, 'due_date').setValue('2026-09-06');
 		await submit(wrapper);
+		await store.syncNow();
 
-		expect(remote.update.mock.calls[0][1].due_at).toBe('2026-09-06T14:30:00Z');
+		expect(sentUpdate(remote).due_at).toBe('2026-09-06T14:30:00Z');
 	});
 
 	it('drops the registered time once the due date is cleared', async () => {
-		routeRef.value = { params: { id: '1' }, query: {} };
-		const { wrapper, remote } = await mountForm(fakeRemote(), [
+		editing();
+		const { wrapper, store, remote } = await mountForm(fakeServer(), [
 			task('1', { due_at: '2026-09-05T14:30:00.000000Z' }),
 		]);
 
 		await field(wrapper, 'due_date').setValue('');
 		await submit(wrapper);
+		await store.syncNow();
 
-		expect(remote.update.mock.calls[0][1].due_at).toBeNull();
+		expect(sentUpdate(remote).due_at).toBeNull();
 	});
 });
 
 describe('editing a task', () => {
 	it('fills the form from the task being edited', async () => {
-		routeRef.value = { params: { id: '1' }, query: {} };
-		const { wrapper } = await mountForm(fakeRemote(), [
+		editing();
+		const { wrapper } = await mountForm(fakeServer(), [
 			task('1', { title: 'Buy milk', notes: 'Semi-skimmed' }),
 		]);
 
@@ -208,159 +304,169 @@ describe('editing a task', () => {
 		expect(field(wrapper, 'notes').element.value).toBe('Semi-skimmed');
 	});
 
-	it('fetches the task when it is not already loaded, so a deep link works', async () => {
-		routeRef.value = { params: { id: '1' }, query: {} };
-		const get = vi.fn().mockResolvedValue(task('1', { title: 'Buy milk' }));
-		const { wrapper } = await mountForm(fakeRemote({ get }), []);
+	it('syncs for a deep link that arrived before this device had the list', async () => {
+		editing();
+		const { wrapper, remote } = await mountForm(
+			fakeServer(),
+			[task('1', { title: 'Buy milk' })],
+			{ prime: false },
+		);
 
-		expect(get).toHaveBeenCalledWith('1');
+		expect(remote.listAll).toHaveBeenCalled();
 		expect(field(wrapper, 'title').element.value).toBe('Buy milk');
 	});
 
+	it('opens a task held only on this device without reaching for the network', async () => {
+		// A task created offline has no server record at all. Refusing to open it
+		// would make the app unusable for exactly the work it just accepted.
+		const pinia = createPinia();
+		setActivePinia(pinia);
+		const remote = fakeServer();
+		useRemote(remote);
+
+		const store = useTasksStore();
+		const created = await store.create({ title: 'Buy milk', notes: null, due_at: null, duration: null });
+
+		routeRef.value = { params: { id: created.id }, query: {} };
+		remote.listAll.mockClear();
+
+		const wrapper = mount(TaskFormView, { global: { plugins: [pinia], stubs: { RouterLink: true } } });
+		await flushPromises();
+
+		expect(field(wrapper, 'title').element.value).toBe('Buy milk');
+		expect(remote.listAll).not.toHaveBeenCalled();
+	});
+
 	it('saves the change and returns to the list', async () => {
-		routeRef.value = { params: { id: '1' }, query: {} };
-		const { wrapper, remote } = await mountForm(fakeRemote(), [task('1')]);
+		editing();
+		const { wrapper, store, remote } = await mountForm(fakeServer(), [task('1')]);
 
 		await field(wrapper, 'title').setValue('Renamed');
 		await submit(wrapper);
 
-		expect(remote.update).toHaveBeenCalledWith('1', expect.objectContaining({ title: 'Renamed' }));
 		expect(pushMock).toHaveBeenCalledWith('/');
+
+		await store.syncNow();
+
+		expect(remote.update).toHaveBeenCalledWith('1', expect.objectContaining({ title: 'Renamed' }));
 	});
 
 	it('does not reopen a completed task it is editing', async () => {
-		routeRef.value = { params: { id: '1' }, query: {} };
-		const completed = task('1', { completed_at: '2026-08-30T10:00:00.000000Z' });
-		const { wrapper, remote } = await mountForm(fakeRemote(), [completed]);
+		editing();
+		const { wrapper, store, remote } = await mountForm(fakeServer(), [
+			task('1', { completed_at: '2026-08-30T10:00:00.000000Z' }),
+		]);
 
 		await field(wrapper, 'title').setValue('Renamed');
 		await submit(wrapper);
+		await store.syncNow();
 
-		// The trap: a PUT omitting completed_at reopens the task. A PATCH that
-		// never mentions it cannot.
-		expect(remote.update.mock.calls[0][1]).not.toHaveProperty('completed_at');
+		// The trap: anything that carries completed_at can reopen the task once it
+		// is coalesced with another edit. An edit never mentions it.
+		expect(sentUpdate(remote)).not.toHaveProperty('completed_at');
 		expect(remote.replace).not.toHaveBeenCalled();
+		expect(store.tasks[0].completed_at).toBe('2026-08-30T10:00:00.000000Z');
 	});
 });
 
-describe('when the task cannot be loaded', () => {
+describe('when the task cannot be found', () => {
 	it('says so rather than showing a blank form that looks editable', async () => {
-		routeRef.value = { params: { id: '1' }, query: {} };
-		const get = vi.fn().mockRejectedValue(failure(500));
-		const { wrapper } = await mountForm(fakeRemote({ get }), []);
+		editing();
+		const remote = fakeServer();
+		remote.listAll = failing(500);
+
+		const { wrapper } = await mountForm(remote, [], { prime: false });
 
 		expect(wrapper.find('.error').exists()).toBe(true);
 	});
 
 	it('refuses to save, so a failed load cannot blank the real task', async () => {
-		routeRef.value = { params: { id: '1' }, query: {} };
-		const get = vi.fn().mockRejectedValue(failure(500));
-		const { wrapper, remote } = await mountForm(fakeRemote({ get }), []);
+		editing();
+		const remote = fakeServer();
+		remote.listAll = failing(500);
 
-		// The trap: an empty form PATCHed over a real record wipes its title,
-		// notes and due date because of one transient network blip.
+		const { wrapper, store } = await mountForm(remote, [], { prime: false });
+
+		// The trap: an empty form saved over a real record wipes its title, notes,
+		// duration and due date because of one transient failure.
 		expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeDefined();
 
 		await submit(wrapper);
 
-		expect(remote.update).not.toHaveBeenCalled();
-	});
-
-	it('ends the session rather than dying quietly when the token has expired', async () => {
-		routeRef.value = { params: { id: '1' }, query: {} };
-		const get = vi.fn().mockRejectedValue(failure(401));
-		await mountForm(fakeRemote({ get }), []);
-
-		expect(replaceMock).toHaveBeenCalledWith('/login');
+		expect(store.tasks).toEqual([]);
 	});
 });
 
-describe('when the save is refused', () => {
-	it('ends the session on a 401 instead of showing "Unauthenticated." on a dead form', async () => {
-		const create = vi.fn().mockRejectedValue(failure(401));
-		const { wrapper } = await mountForm(fakeRemote({ create }));
+describe('saving with no connection', () => {
+	it('saves anyway and returns to the list', async () => {
+		const remote = fakeServer();
+		remote.listAll = failing(0);
+		remote.create = failing(0);
+
+		const { wrapper, store } = await mountForm(remote, [], { prime: false });
 
 		await field(wrapper, 'title').setValue('Buy milk');
 		await submit(wrapper);
 
-		expect(replaceMock).toHaveBeenCalledWith('/login');
+		expect(store.tasks.map((t) => t.title)).toEqual(['Buy milk']);
+		expect(pushMock).toHaveBeenCalledWith('/');
 	});
 
-	it('shows the server field message against the field, keeping what was typed', async () => {
-		const create = vi
-			.fn()
-			.mockRejectedValue(failure(422, { errors: { title: ['The title is too long.'] } }));
-		const { wrapper } = await mountForm(fakeRemote({ create }));
+	it('keeps the task queued so it goes out when the connection returns', async () => {
+		const remote = fakeServer();
+		remote.listAll = failing(0);
+		remote.create = failing(0);
 
-		await field(wrapper, 'title').setValue('A very long title');
-		await submit(wrapper);
-
-		expect(wrapper.find('.field__error').text()).toContain('The title is too long.');
-		expect(field(wrapper, 'title').element.value).toBe('A very long title');
-		expect(pushMock).not.toHaveBeenCalled();
-	});
-
-	it('keeps the form populated when the connection drops, so nothing is retyped', async () => {
-		const create = vi.fn().mockRejectedValue(failure(0));
-		const { wrapper } = await mountForm(fakeRemote({ create }));
+		const { wrapper, store } = await mountForm(remote, [], { prime: false });
 
 		await field(wrapper, 'title').setValue('Buy milk');
-		await field(wrapper, 'notes').setValue('Semi-skimmed');
 		await submit(wrapper);
 
-		expect(wrapper.find('.error').exists()).toBe(true);
-		expect(field(wrapper, 'title').element.value).toBe('Buy milk');
-		expect(field(wrapper, 'notes').element.value).toBe('Semi-skimmed');
-		expect(pushMock).not.toHaveBeenCalled();
+		expect(store.pendingCount).toBe(1);
 	});
 });
 
 describe('deleting from the form', () => {
 	it('asks before deleting rather than acting on the click', async () => {
-		routeRef.value = { params: { id: '1' }, query: {} };
-		const { wrapper, remote } = await mountForm(fakeRemote(), [task('1')]);
+		editing();
+		const { wrapper, store } = await mountForm(fakeServer(), [task('1')]);
 
 		await wrapper.find('[data-action="delete"]').trigger('click');
 
 		expect(wrapper.find('.modal').exists()).toBe(true);
-		expect(remote.remove).not.toHaveBeenCalled();
+		expect(store.tasks).toHaveLength(1);
 	});
 
 	it('deletes and returns to the list once confirmed', async () => {
-		routeRef.value = { params: { id: '1' }, query: {} };
-		const { wrapper, remote } = await mountForm(fakeRemote(), [task('1')]);
+		editing();
+		const { wrapper, store, remote } = await mountForm(fakeServer(), [task('1')]);
 
 		await wrapper.find('[data-action="delete"]').trigger('click');
 		await wrapper.find('[data-action="confirm"]').trigger('click');
 		await flushPromises();
+
+		expect(store.tasks).toEqual([]);
+		expect(pushMock).toHaveBeenCalledWith('/');
+
+		await store.syncNow();
 
 		expect(remote.remove).toHaveBeenCalledWith('1');
+	});
+
+	it('deletes with no connection, and sends it later', async () => {
+		editing();
+		const remote = fakeServer([task('1')]);
+		const { wrapper, store } = await mountForm(remote, []);
+
+		remote.listAll = failing(0);
+		remote.remove = failing(0);
+
+		await wrapper.find('[data-action="delete"]').trigger('click');
+		await wrapper.find('[data-action="confirm"]').trigger('click');
+		await flushPromises();
+
+		expect(store.tasks).toEqual([]);
 		expect(pushMock).toHaveBeenCalledWith('/');
-	});
-
-	it('ends the session when the token expired before the delete', async () => {
-		routeRef.value = { params: { id: '1' }, query: {} };
-		const remove = vi.fn().mockRejectedValue(failure(401));
-		const { wrapper } = await mountForm(fakeRemote({ remove }), [task('1')]);
-
-		await wrapper.find('[data-action="delete"]').trigger('click');
-		await wrapper.find('[data-action="confirm"]').trigger('click');
-		await flushPromises();
-
-		expect(replaceMock).toHaveBeenCalledWith('/login');
-	});
-
-	it('keeps the task and says so when the delete fails for another reason', async () => {
-		routeRef.value = { params: { id: '1' }, query: {} };
-		const remove = vi.fn().mockRejectedValue(failure(500));
-		const { wrapper } = await mountForm(fakeRemote({ remove }), [task('1')]);
-
-		await wrapper.find('[data-action="delete"]').trigger('click');
-		await wrapper.find('[data-action="confirm"]').trigger('click');
-		await flushPromises();
-
-		expect(wrapper.find('.error').text()).toBeTruthy();
-		expect(pushMock).not.toHaveBeenCalled();
 	});
 
 	it('offers no delete while creating — there is nothing to delete yet', async () => {

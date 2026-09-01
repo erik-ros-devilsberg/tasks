@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { useTasksStore } from '@/stores/tasks';
@@ -24,45 +24,37 @@ const STATE_WORDS = {
 	completed: 'Completed',
 };
 
-/**
- * The store rethrows a 401 and folds everything else into `tasks.error`. Every
- * action has to catch it: the token is already gone by then, and without this
- * the user is left on a list that still looks signed in.
- */
-async function guard(action) {
-	try {
-		await action();
-	} catch {
-		// These tasks belong to the account that just ended, and this device may
-		// be handed to someone else.
-		tasks.forget();
-		await router.replace('/login');
-	}
-}
+onMounted(async () => {
+	// The device first, so the list is on screen before anything touches the
+	// network — then the network, to catch up.
+	await tasks.load();
+	await tasks.syncNow();
+});
 
-const refresh = () => guard(() => tasks.load());
+useRefreshOnReturn(() => tasks.syncNow());
 
-onMounted(refresh);
-useRefreshOnReturn(refresh);
+// A connection coming back is the one moment a queue can finally be drained.
+const drain = () => tasks.syncNow();
 
-async function toggle(task, event) {
+onMounted(() => window.addEventListener('online', drain));
+onUnmounted(() => window.removeEventListener('online', drain));
+
+async function toggle(task) {
 	// Which way this goes is decided by the record, not by the event — a double
 	// click cannot complete the same task twice.
-	await guard(() => (isOpen(task) ? tasks.complete(task.id) : tasks.reopen(task.id)));
+	await (isOpen(task) ? tasks.complete(task.id) : tasks.reopen(task.id));
 
-	// The browser has already flipped the box. If the write failed the record is
-	// unchanged, and Vue will not patch a prop it believes is the same — so put
-	// the DOM back by hand, or the row sits there claiming to be done.
-	if (event.target) {
-		event.target.checked = !isOpen(task);
-	}
+	// Saved on the device already; this only pushes it onwards. Offline it is a
+	// no-op that leaves the change safely queued.
+	await tasks.syncNow();
 }
 
 async function destroy() {
 	const task = deleting.value;
 	deleting.value = null;
 
-	await guard(() => tasks.remove(task.id));
+	await tasks.remove(task.id);
+	await tasks.syncNow();
 }
 </script>
 
@@ -73,23 +65,32 @@ async function destroy() {
 		<h1 class="visually-hidden">Tasks</h1>
 
 		<!--
-			Shown alongside the list rather than instead of it: a failed reload
-			still leaves the last known tasks worth looking at.
+			Shown alongside the list rather than instead of it: a change the server
+			refused still leaves the rest of the list worth looking at.
 		-->
 		<p v-if="tasks.error" class="error">{{ tasks.error }}</p>
+
+		<!--
+			A sync that could not get through is not a fault the user caused, and
+			the list underneath is still worth reading — so it is a notice beside
+			the tasks rather than an error in place of them.
+		-->
+		<p v-if="tasks.notice" class="notice">{{ tasks.notice }}</p>
 
 		<p v-if="tasks.loading && tasks.tasks.length === 0" class="text-muted">Loading your tasks…</p>
 
 		<!--
-			Both states are gated on a load having actually succeeded. Saying
-			"no tasks yet" under a connection error would be a guess presented
-			as fact.
+			Gated on the sync having got through. The device always answers, so an
+			empty cache is a fact once we have heard from the server — but on a
+			device that has never managed a sync it is a guess, and saying "no
+			tasks yet" next to "no connection" tells the user two contradictory
+			things.
 		-->
-		<p v-else-if="tasks.loaded && tasks.tasks.length === 0" class="text-muted">
+		<p v-else-if="tasks.loaded && tasks.tasks.length === 0 && !tasks.notice" class="text-muted">
 			No tasks yet. Add one and it will show up here.
 		</p>
 
-		<p v-else-if="tasks.loaded && tasks.visible.length === 0" class="text-muted">
+		<p v-else-if="tasks.loaded && tasks.tasks.length > 0 && tasks.visible.length === 0" class="text-muted">
 			Nothing open. Everything here is done.
 		</p>
 
@@ -106,7 +107,7 @@ async function destroy() {
 						type="checkbox"
 						:checked="!isOpen(task)"
 						:aria-label="`${isOpen(task) ? 'Complete' : 'Reopen'} ${task.title}`"
-						@change="toggle(task, $event)"
+						@change="toggle(task)"
 					/>
 
 					<button
@@ -118,6 +119,15 @@ async function destroy() {
 						{{ task.title }}
 						<span class="visually-hidden">{{ STATE_WORDS[stateOf(task, tasks.now)] }}</span>
 					</button>
+
+					<!--
+						Not a warning — the change is saved. It says only that the
+						server has not been told yet, which is why the same task may
+						look different on another device for now.
+					-->
+					<span v-if="tasks.isPending(task.id)" class="badge badge--pending" data-state="pending">
+						Not synced
+					</span>
 
 					<button
 						class="btn btn--ghost btn--icon btn--sm"

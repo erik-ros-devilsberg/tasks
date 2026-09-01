@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import App from '@/App.vue';
 import { TOKEN_KEY } from '@/stores/session';
 import { useRemote, useTasksStore } from '@/stores/tasks';
+import { fakeServer, failing, task } from './support/server';
 
 const { replaceMock } = vi.hoisted(() => ({ replaceMock: vi.fn() }));
 vi.mock('vue-router', () => ({
@@ -15,21 +16,12 @@ vi.mock('vue-router', () => ({
 	RouterLink: { template: '<a><slot /></a>' },
 }));
 
-function fakeRemote(over = {}) {
-	return {
-		listAll: vi.fn().mockResolvedValue([]),
-		get: vi.fn(),
-		create: vi.fn(),
-		update: vi.fn(),
-		replace: vi.fn(),
-		complete: vi.fn(),
-		reopen: vi.fn(),
-		remove: vi.fn().mockResolvedValue(null),
-		...over,
-	};
+/** The browser's own view of the connection, which `useOnline` reads. */
+function setOnline(value) {
+	Object.defineProperty(window.navigator, 'onLine', { value, configurable: true });
 }
 
-function mountApp(remote = fakeRemote()) {
+function mountApp(remote = fakeServer()) {
 	const pinia = createPinia();
 	setActivePinia(pinia);
 	useRemote(remote);
@@ -41,7 +33,7 @@ function mountApp(remote = fakeRemote()) {
 }
 
 /** Signed in, with the menu already open — the state most of these start from. */
-async function withMenuOpen(remote = fakeRemote()) {
+async function withMenuOpen(remote = fakeServer()) {
 	localStorage.setItem(TOKEN_KEY, 'a-token');
 	const wrapper = mountApp(remote);
 	await wrapper.find('[data-action="menu"]').trigger('click');
@@ -63,6 +55,7 @@ function vueFiles(dir) {
 
 beforeEach(() => {
 	localStorage.clear();
+	setOnline(true);
 	replaceMock.mockClear();
 });
 
@@ -132,7 +125,7 @@ describe('the menu', () => {
 	it('carries every action the toolbar used to', async () => {
 		const wrapper = await withMenuOpen();
 
-		expect(wrapper.find('[data-action="refresh"]').exists()).toBe(true);
+		expect(wrapper.find('[data-action="sync"]').exists()).toBe(true);
 		expect(wrapper.find('[data-action="toggle-completed"]').exists()).toBe(true);
 		expect(wrapper.find('[data-action="sign-out"]').exists()).toBe(true);
 	});
@@ -156,32 +149,115 @@ describe('the menu', () => {
 	it('closes once an item has been chosen — the menu is not a place to live', async () => {
 		const wrapper = await withMenuOpen();
 
-		await wrapper.find('[data-action="refresh"]').trigger('click');
+		await wrapper.find('[data-action="sync"]').trigger('click');
 		await flushPromises();
 
 		expect(wrapper.find('.menu').exists()).toBe(false);
 	});
 
-	it('reloads the list on Refresh, for when the user knows better than the app', async () => {
-		const remote = fakeRemote();
+	it('syncs on demand, for when the user knows better than the app', async () => {
+		const remote = fakeServer();
 		const wrapper = await withMenuOpen(remote);
 
-		await wrapper.find('[data-action="refresh"]').trigger('click');
+		await wrapper.find('[data-action="sync"]').trigger('click');
 		await flushPromises();
 
 		expect(remote.listAll).toHaveBeenCalled();
 	});
 
-	it('ends the session when Refresh meets an expired token', async () => {
-		const listAll = vi.fn().mockRejectedValue(Object.assign(new Error('401'), { status: 401 }));
-		const wrapper = await withMenuOpen(fakeRemote({ listAll }));
+	it('says how much work is still waiting, so "sync now" is not a guess', async () => {
+		const wrapper = await withMenuOpen();
+		const tasks = useTasksStore();
 
-		await wrapper.find('[data-action="refresh"]').trigger('click');
+		await tasks.create({ title: 'Buy milk', notes: null, due_at: null, duration: null });
+		await wrapper.vm.$nextTick();
+
+		expect(wrapper.find('[data-action="sync"]').text()).toContain('1');
+	});
+});
+
+describe('when a sync finds the session gone', () => {
+	it('returns to login rather than leaving a screen that still looks signed in', async () => {
+		// Handled in the shell, not per view: any view can be on screen when a
+		// background sync meets an expired token.
+		const remote = fakeServer();
+		remote.listAll = failing(401);
+
+		const wrapper = await withMenuOpen(remote);
+
+		await wrapper.find('[data-action="sync"]').trigger('click');
 		await flushPromises();
 
 		expect(replaceMock).toHaveBeenCalledWith('/login');
 	});
 
+	it('empties the device on the way out — the tasks belong to that account', async () => {
+		const remote = fakeServer([task('1', { title: 'Private thing' })]);
+		const wrapper = await withMenuOpen(remote);
+		const tasks = useTasksStore();
+
+		await tasks.syncNow();
+		expect(tasks.tasks).toHaveLength(1);
+
+		remote.listAll = failing(401);
+		await wrapper.find('[data-action="sync"]').trigger('click');
+		await flushPromises();
+
+		expect(tasks.tasks).toEqual([]);
+	});
+});
+
+describe('the connection strip', () => {
+	it('says the app is offline, in the voice of a fact rather than a failure', async () => {
+		setOnline(false);
+		localStorage.setItem(TOKEN_KEY, 'a-token');
+
+		const wrapper = mountApp();
+
+		expect(wrapper.find('[data-state="offline"]').exists()).toBe(true);
+		expect(wrapper.find('.conn--offline').text()).toMatch(/saved here/i);
+	});
+
+	it('counts the changes that have not reached the server yet', async () => {
+		localStorage.setItem(TOKEN_KEY, 'a-token');
+		const wrapper = mountApp();
+		const tasks = useTasksStore();
+
+		await tasks.create({ title: 'Buy milk', notes: null, due_at: null, duration: null });
+		await wrapper.vm.$nextTick();
+
+		expect(wrapper.find('[data-state="pending"]').text()).toMatch(/1 change waiting/i);
+	});
+
+	it('says nothing at all when everything is synced', async () => {
+		localStorage.setItem(TOKEN_KEY, 'a-token');
+
+		const wrapper = mountApp();
+
+		expect(wrapper.find('.conn').exists()).toBe(false);
+	});
+
+	it('stays out of the way of someone who is not signed in', () => {
+		setOnline(false);
+
+		expect(mountApp().find('.conn').exists()).toBe(false);
+	});
+});
+
+describe('a new version', () => {
+	it('offers a reload rather than taking the page out from under the user', async () => {
+		const wrapper = mountApp();
+
+		expect(wrapper.find('[data-action="reload"]').exists()).toBe(false);
+
+		window.dispatchEvent(new CustomEvent('app-update-ready'));
+		await wrapper.vm.$nextTick();
+
+		expect(wrapper.find('[data-action="reload"]').exists()).toBe(true);
+	});
+});
+
+describe('the completed-tasks toggle', () => {
 	it('toggles completed tasks, naming what the next click will do', async () => {
 		const wrapper = await withMenuOpen();
 		const tasks = useTasksStore();

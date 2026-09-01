@@ -64,9 +64,13 @@ a:hover {
 /*
  * A visible ring, not a background tint — the brand's own site gets this wrong
  * and we are not inheriting it.
+ *
+ * Ghost White, not fuchsia. Fuchsia is the colour this app uses to say something
+ * is wrong — on `.field__error`, on `.btn--danger`, on `.is-overdue` — and a
+ * field that merely has the cursor in it is not an error. Focus is brightness.
  */
 :focus-visible {
-	outline: 2px solid var(--hot-fuchsia);
+	outline: 2px solid var(--ghost-white);
 	outline-offset: 2px;
 }
 

@@ -136,19 +136,19 @@ async function destroy() {
 </script>
 
 <template>
-	<section class="app-view container">
+	<section class="container">
 		<h1>{{ editing ? 'Edit task' : 'New task' }}</h1>
 
 		<form class="form" @submit.prevent="submit">
 			<div class="field">
-				<label for="title">Title</label>
-				<input id="title" v-model="title" name="title" type="text" maxlength="255" />
+				<label class="field__label" for="title">Title</label>
+				<input class="field__input" id="title" v-model="title" name="title" type="text" maxlength="255" />
 				<p v-if="fieldErrors.title" class="field__error">{{ fieldErrors.title[0] }}</p>
 			</div>
 
 			<div class="field">
-				<label for="notes">Notes</label>
-				<textarea id="notes" v-model="notes" name="notes"></textarea>
+				<label class="field__label" for="notes">Notes</label>
+				<textarea class="field__input" id="notes" v-model="notes" name="notes"></textarea>
 				<p v-if="fieldErrors.notes" class="field__error">{{ fieldErrors.notes[0] }}</p>
 			</div>
 
@@ -157,8 +157,8 @@ async function destroy() {
 				is the answer this form gives, and datetime-local cannot express it.
 			-->
 			<div class="field">
-				<label for="due_date">Due</label>
-				<input id="due_date" v-model="dueDate" name="due_date" type="date" />
+				<label class="field__label" for="due_date">Due</label>
+				<input class="field__input" id="due_date" v-model="dueDate" name="due_date" type="date" />
 
 				<p v-if="fieldErrors.due_at" class="field__error">{{ fieldErrors.due_at[0] }}</p>
 			</div>

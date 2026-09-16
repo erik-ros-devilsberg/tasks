@@ -1,23 +1,132 @@
-/* Single-purpose helpers. Keep this file short — it is not a framework. */
+/* ==========================================================================
+   Utilities — single-purpose helpers. Last in the cascade so they win.
+   Keep this file short: it is a set of nudges, not a framework.
+   ========================================================================== */
+
+/* ---------- Text ---------- */
 
 .text-muted {
-	color: var(--gray-mid);
+	color: var(--fg-soft);
 }
 
+.text-faint {
+	color: var(--fg-meta);
+}
+
+.text-accent {
+	color: var(--accent);
+}
+
+.text-success {
+	color: var(--success);
+}
+
+.text-error {
+	color: var(--error);
+}
+
+/* Uppercase Lemon Milk label — the brand's meta style. */
 .text-meta {
-	color: var(--blue-slate);
 	font-family: var(--font-title);
-	font-size: 0.75rem;
+	font-size: var(--text-xs);
 	font-weight: 500;
-	letter-spacing: 0.1em;
+	letter-spacing: var(--tracking-label);
 	text-transform: uppercase;
+	color: var(--fg-meta);
 }
 
-/* Notes are typed by hand — the user's line breaks are content. */
+.text-title {
+	font-family: var(--font-title);
+}
+
+.text-sm {
+	font-size: var(--text-sm);
+}
+
+.text-xs {
+	font-size: var(--text-xs);
+}
+
+.text-lg {
+	font-size: var(--text-lg);
+}
+
+.text-center {
+	text-align: center;
+}
+
+.text-right {
+	text-align: right;
+}
+
+.text-upper {
+	text-transform: uppercase;
+	letter-spacing: var(--tracking-label);
+}
+
+.text-nowrap {
+	white-space: nowrap;
+}
+
+/* User-typed text — their line breaks are content. */
 .text-preline {
 	white-space: pre-line;
 }
 
+.text-truncate {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.text-mono {
+	font-family: var(--font-mono);
+	font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Spacing ---------- */
+
+.mt-0 { margin-top: 0; }
+.mt-1 { margin-top: var(--space-2); }
+.mt-2 { margin-top: var(--space-4); }
+.mt-3 { margin-top: var(--space-6); }
+.mt-4 { margin-top: var(--space-8); }
+
+.mb-0 { margin-bottom: 0; }
+.mb-1 { margin-bottom: var(--space-2); }
+.mb-2 { margin-bottom: var(--space-4); }
+.mb-3 { margin-bottom: var(--space-6); }
+.mb-4 { margin-bottom: var(--space-8); }
+
+.p-0 { padding: 0; }
+.p-1 { padding: var(--space-2); }
+.p-2 { padding: var(--space-4); }
+.p-3 { padding: var(--space-6); }
+
+/* ---------- Sizing & display ---------- */
+
+.w-full {
+	width: 100%;
+}
+
+.flex-1 {
+	flex: 1 1 0;
+	min-width: 0;
+}
+
+.ml-auto {
+	margin-left: auto;
+}
+
+.hidden {
+	display: none !important;
+}
+
+.relative {
+	position: relative;
+}
+
+/* Visually hidden, still read by screen readers. */
 .visually-hidden {
 	position: absolute;
 	width: 1px;
@@ -30,12 +139,40 @@
 	border: 0;
 }
 
-.mt-2 {
-	margin-top: 1rem;
+/* ---------- Surfaces ---------- */
+
+.surface-dark {
+	background-color: var(--onyx);
+	color: var(--ghost-white);
 }
 
-.stack {
-	display: flex;
-	flex-direction: column;
-	gap: 1rem;
+.surface-light {
+	background-color: var(--gray-light);
+	color: var(--text-primary);
+}
+
+.border-top {
+	border-top: 1px solid var(--border);
+}
+
+.border-bottom {
+	border-bottom: 1px solid var(--border);
+}
+
+.rounded {
+	border-radius: var(--radius);
+}
+
+/* ---------- Responsive visibility ---------- */
+
+@media (max-width: 768px) {
+	.hide-mobile {
+		display: none !important;
+	}
+}
+
+@media (min-width: 769px) {
+	.hide-desktop {
+		display: none !important;
+	}
 }

@@ -1,4 +1,7 @@
-/* Element defaults. Nothing here is class-based. */
+/* ==========================================================================
+   Base — reset, canvas, element typography, links, focus.
+   Element selectors only. No classes in this file.
+   ========================================================================== */
 
 *,
 *::before,
@@ -7,68 +10,172 @@
 }
 
 html {
+	scroll-behavior: smooth;
 	-webkit-text-size-adjust: 100%;
-	/*
-	 * The app is dark only. Without this the browser draws its own controls for
-	 * a light page — the date picker's calendar icon comes back as a dark glyph
-	 * on a dark field, and the field reads as broken because nothing visibly
-	 * responds to a click.
-	 */
-	color-scheme: dark;
 }
 
 body {
 	margin: 0;
-	background: var(--onyx);
-	color: var(--ghost-white);
+	min-height: 100vh;
+	background-color: var(--bg);
+	color: var(--fg);
 	font-family: var(--font-body);
-	font-size: 1rem;
-	line-height: 1.6;
+	font-size: var(--text-md);
+	line-height: var(--leading-body);
+	-webkit-font-smoothing: antialiased;
 }
+
+/* Theme scope — the one class selector in this file. A re-themed region
+   must repaint its own ink; its surface comes from the component. */
+[data-theme='light'],
+.theme-light {
+	color: var(--fg);
+}
+
+/* ---------- Headings: Lemon Milk, medium, tight ---------- */
 
 h1,
 h2,
-h3 {
-	margin: 0 0 0.5rem;
+h3,
+h4,
+h5,
+h6 {
 	font-family: var(--font-title);
 	font-weight: 500;
-	line-height: 1.2;
+	line-height: var(--leading-tight);
+	margin: 0 0 var(--space-4);
 }
 
 h1 {
-	font-size: clamp(1.75rem, 6vw, 2.5rem);
+	font-size: var(--text-3xl);
 }
 
 h2 {
-	font-size: 1.5rem;
+	font-size: var(--text-2xl);
 }
 
 h3 {
-	font-size: 1.25rem;
+	font-size: var(--text-xl);
 }
 
-p {
-	margin: 0 0 1rem;
+h4 {
+	font-size: var(--text-lg);
 }
+
+h5,
+h6 {
+	font-size: var(--text-md);
+}
+
+/* ---------- Flow text ---------- */
+
+p,
+ul,
+ol,
+dl,
+blockquote,
+pre,
+figure,
+table {
+	margin: 0 0 var(--space-5);
+}
+
+ul,
+ol {
+	padding-left: 1.25rem;
+}
+
+li + li {
+	margin-top: var(--space-1);
+}
+
+blockquote {
+	padding-left: var(--space-4);
+	border-left: 3px solid var(--accent);
+	color: var(--fg-soft);
+}
+
+hr {
+	border: 0;
+	border-top: 1px solid var(--border);
+	margin: var(--space-6) 0;
+}
+
+small {
+	font-size: var(--text-sm);
+}
+
+strong,
+b {
+	font-weight: 700;
+}
+
+/* ---------- Code ---------- */
+
+code,
+kbd,
+pre,
+samp {
+	font-family: var(--font-mono);
+	font-size: 0.9em;
+}
+
+code,
+kbd {
+	padding: 0.1em 0.4em;
+	background-color: var(--bg-inset);
+	border-radius: var(--radius-sm);
+}
+
+kbd {
+	border: 1px solid var(--border-strong);
+	border-bottom-width: 2px;
+}
+
+pre {
+	padding: var(--space-4);
+	overflow-x: auto;
+	background-color: var(--bg-raised);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+}
+
+pre code {
+	padding: 0;
+	background: none;
+}
+
+/* ---------- Media ---------- */
+
+img,
+svg,
+video {
+	max-width: 100%;
+	height: auto;
+	display: block;
+}
+
+figcaption {
+	margin-top: var(--space-2);
+	font-size: var(--text-sm);
+	color: var(--fg-meta);
+}
+
+/* ---------- Links: soft grey brightening to white on the dark canvas.
+   Fuchsia links are opt-in via .link--accent (components). ---------- */
 
 a {
-	color: var(--hot-fuchsia);
-	text-decoration: none;
+	color: var(--fg-soft);
+	text-decoration: underline;
+	text-underline-offset: 2px;
 	transition: color var(--transition);
 }
 
 a:hover {
-	color: var(--ghost-white);
+	color: var(--fg);
 }
 
-/*
- * A visible ring, not a background tint — the brand's own site gets this wrong
- * and we are not inheriting it.
- */
-:focus-visible {
-	outline: 2px solid var(--hot-fuchsia);
-	outline-offset: 2px;
-}
+/* ---------- Form controls inherit the canvas type ---------- */
 
 button,
 input,
@@ -78,19 +185,41 @@ textarea {
 	color: inherit;
 }
 
-ul {
-	margin: 0;
-	padding: 0;
-	list-style: none;
+button {
+	cursor: pointer;
 }
 
+/* ---------- Focus: a brighter white ring. Red is for errors, green is for go.
+   One rule, every interactive element, keyboard-only. ---------- */
+
+:focus-visible {
+	outline: var(--focus-width) solid var(--focus);
+	outline-offset: var(--focus-offset);
+}
+
+:focus:not(:focus-visible) {
+	outline: none;
+}
+
+/* ---------- Selection ---------- */
+
+::selection {
+	background-color: var(--selection-bg);
+	color: var(--selection-fg);
+}
+
+/* ---------- Reduced motion ---------- */
+
 @media (prefers-reduced-motion: reduce) {
+	html {
+		scroll-behavior: auto;
+	}
+
 	*,
 	*::before,
 	*::after {
 		animation-duration: 0.01ms !important;
 		animation-iteration-count: 1 !important;
 		transition-duration: 0.01ms !important;
-		scroll-behavior: auto !important;
 	}
 }

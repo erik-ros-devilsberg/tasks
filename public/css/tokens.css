@@ -1,79 +1,178 @@
-/*
- * Every colour, font, spacing and motion value in the app lives here.
- * No hardcoded hex anywhere else — see CLAUDE.md §5.
- */
+/* ==========================================================================
+   Tokens — every colour, font, size, radius, shadow and motion value.
+   No hardcoded hex, rgba() or magic number outside this file.
 
-/* Open Sans from Bunny rather than Google: same faces, no tracking. */
-@import url('https://fonts.bunny.net/css?family=open-sans:400,500,600,700');
-
-/*
- * Lemon Milk is a licensed brand asset. If the files are not vendored into
- * public/fonts/ the sans-serif fallback carries the wordmark — do not
- * substitute a different display face.
- */
-@font-face {
-	font-family: 'Lemon Milk';
-	src: url('/fonts/LEMONMILK-Medium.otf') format('opentype');
-	font-weight: 500;
-	font-display: swap;
-}
-
-@font-face {
-	font-family: 'Lemon Milk';
-	src: url('/fonts/LEMONMILK-Bold.otf') format('opentype');
-	font-weight: 700;
-	font-display: swap;
-}
+   Two layers:
+     1. Brand palette   — the official Devilsberg colours, by name. Never used
+                          directly by components.
+     2. Semantic tokens — what a colour *means* (surface, ink, border, state).
+                          Components only reach for these, so a theme is one
+                          block of overrides.
+   ========================================================================== */
 
 :root {
-	/* Primary */
+	color-scheme: dark;
+
+	/* ---------- 1. Brand palette (brand.md §4) ---------- */
 	--onyx: #0a0a10;
 	--ghost-white: #f7f7ff;
 	--blue-slate: #586f7c;
 	--hot-fuchsia: #ff3366;
 	--sea-green: #058c42;
 
-	/* Supporting */
 	--grey-dark: #38464e;
 	--gray-mid: #becad1;
-	/* Dimmer than gray-mid and still over 4.5:1 on the row surfaces. */
-	--gray-faint: #8b98a1;
 	--gray-light: #e9edf0;
+	--pink-pale: #ffe5ec;
+	--accent-dark: #73001d;
 
-	/*
-	 * Row states. The list carries no badges any more, so the background of a
-	 * row is what tells the user where a task stands. Each pairs with the ink
-	 * token below it — dark ink on the bright fills, light ink on the dark ones
-	 * — so every row clears the contrast floor rather than only the pretty ones.
-	 */
-	--row-overdue: #8f0f26;
-	--row-overdue-ink: var(--ghost-white);
-	--row-today: #b35c00;
-	--row-today-ink: var(--ghost-white);
-	--row-upcoming: #0bbf5c;
-	--row-upcoming-ink: var(--onyx);
-	/* Faded against the dated rows, but not so faint the task reads as filler. */
-	--row-undated: rgba(11, 191, 92, 0.42);
-	--row-undated-ink: var(--ghost-white);
-	--row-completed: rgba(247, 247, 255, 0.07);
-	--row-completed-ink: var(--gray-faint);
+	--text-primary: #212135;
+	--text-secondary: #50507f;
+	--text-muted: #38464e;
+	--text-strong: #161c1f;
 
-	/* Derived surfaces. Kept as tokens so no component reaches for rgba() itself. */
-	--overlay: rgba(10, 10, 16, 0.9);
-	--field-bg: rgba(88, 111, 124, 0.2);
-	--border: rgba(88, 111, 124, 0.4);
+	/* Translucent derivatives of the palette (brand.md §4 semantic colours). */
+	--slate-a12: rgba(88, 111, 124, 0.12);
+	--slate-a20: rgba(88, 111, 124, 0.2);
+	--slate-a40: rgba(88, 111, 124, 0.4);
+	--fuchsia-a15: rgba(255, 51, 102, 0.15);
+	--green-a15: rgba(5, 140, 66, 0.15);
+	--white-a07: rgba(247, 247, 255, 0.07);
+	--white-a40: rgba(247, 247, 255, 0.4);
+	--onyx-a90: rgba(10, 10, 16, 0.9);
+	--shadow-ink: rgba(10, 10, 16, 0.4);
 
-	/* Typography */
+	/* ---------- 2. Semantic: surfaces ---------- */
+	--bg: var(--onyx);
+	--bg-raised: var(--slate-a20);      /* cards, panels */
+	--bg-inset: var(--slate-a40);       /* chips, tags, code — on top of raised */
+	--bg-field: var(--slate-a20);       /* inputs */
+	--bg-hover: var(--slate-a12);       /* rows, cells */
+	--bg-muted: var(--white-a07);       /* done / disabled rows */
+	--overlay: var(--onyx-a90);
+
+	/* ---------- 2. Semantic: ink ---------- */
+	--fg: var(--ghost-white);
+	--fg-soft: var(--gray-mid);         /* secondary text, taglines */
+	--fg-meta: var(--blue-slate);       /* labels, meta, placeholders */
+	--fg-inverse: var(--onyx);          /* text on bright fills */
+
+	/* ---------- 2. Semantic: lines ---------- */
+	--border: var(--grey-dark);
+	--border-strong: var(--blue-slate);
+	--border-field: var(--blue-slate);
+
+	/* ---------- 2. Semantic: accent & state ----------
+	   Fuchsia is the CTA / link accent AND the error colour (brand.md §4).
+	   Green is go / success. White is focus — never red. */
+	--accent: var(--hot-fuchsia);
+	--accent-bg: var(--fuchsia-a15);
+	--action: var(--blue-slate);        /* primary button rest */
+	--action-hover: var(--sea-green);   /* primary button hover */
+
+	--success: var(--sea-green);
+	--success-bg: var(--green-a15);
+	--error: var(--hot-fuchsia);
+	--error-bg: var(--fuchsia-a15);
+	--info: var(--blue-slate);
+	--info-bg: var(--slate-a20);
+
+	--focus: var(--ghost-white);
+	--selection-bg: var(--gray-light);
+	--selection-fg: var(--onyx);
+	--focus-width: 2px;
+	--focus-offset: 2px;
+
+	/* ---------- Typography (brand.md §5) ---------- */
 	--font-title: 'Lemon Milk', sans-serif;
-	--font-body: 'Open Sans', sans-serif;
+	--font-body: 'Open Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+	--font-tag: 'Streetag', sans-serif;
+	--font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
-	/* Layout */
+	--text-xs: 0.75rem;
+	--text-sm: 0.875rem;
+	--text-md: 1rem;
+	--text-lg: 1.125rem;
+	--text-xl: 1.35rem;
+	--text-2xl: 1.75rem;
+	--text-3xl: 2.5rem;
+	--text-hero: clamp(2.5rem, 8vw, 3.5rem);
+
+	--leading-tight: 1.2;
+	--leading-body: 1.6;
+	--leading-article: 1.8;
+
+	--tracking-label: 0.1em;
+	--tracking-title: 0.05em;
+
+	/* ---------- Spacing ---------- */
+	--space-1: 0.25rem;
+	--space-2: 0.5rem;
+	--space-3: 0.75rem;
+	--space-4: 1rem;
+	--space-5: 1.5rem;
+	--space-6: 2rem;
+	--space-7: 3rem;
+	--space-8: 4rem;
+	--space-9: 6rem;
+
+	/* ---------- Layout ---------- */
 	--container-max: 1200px;
+	--container-narrow: 720px;
 	--container-pad: 2rem;
+	--nav-height: 70px;
+
+	/* ---------- Radius (brand.md §9) ---------- */
 	--radius: 8px;
 	--radius-sm: 4px;
+	--radius-pill: 999px;
+	--radius-round: 50%;
 
-	/* Motion */
+	/* ---------- Shadows ---------- */
+	--shadow-sm: 0 2px 8px var(--shadow-ink);
+	--shadow-md: 0 8px 32px var(--shadow-ink);
+
+	/* ---------- Motion (brand.md §8) — ease only, no bounce ---------- */
 	--transition: 0.2s ease;
-	--transition-overlay: 0.3s ease;
+	--transition-slow: 0.3s ease;
+
+	/* ---------- Z-index ---------- */
+	--z-sticky: 5;
+	--z-nav: 10;
+	--z-modal: 100;
+}
+
+/* Light surface — opt in per page (data-theme="light" on <html> or <body>)
+   or per region (.theme-light on any element, e.g. a .card).
+   Only semantic tokens change; the palette is untouched. */
+[data-theme='light'],
+.theme-light {
+	color-scheme: light;
+
+	--bg: var(--ghost-white);
+	--bg-raised: var(--gray-light);
+	--bg-inset: var(--gray-mid);
+	--bg-field: var(--ghost-white);
+	--bg-hover: var(--gray-light);
+	--bg-muted: var(--gray-light);
+
+	--fg: var(--text-primary);
+	--fg-soft: var(--text-secondary);
+	--fg-meta: var(--blue-slate);
+	--fg-inverse: var(--ghost-white);
+
+	--border: var(--gray-light);
+	--border-strong: var(--gray-mid);
+	--border-field: var(--gray-mid);
+
+	--focus: var(--onyx);
+	--selection-bg: var(--gray-mid);
+	--selection-fg: var(--text-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	:root {
+		--transition: 0s;
+		--transition-slow: 0s;
+	}
 }

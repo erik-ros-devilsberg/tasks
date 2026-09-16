@@ -50,8 +50,8 @@ async function signOut() {
 <template>
 	<a class="skip-link" href="#main">Skip to content</a>
 
-	<nav class="nav">
-		<div class="container nav__inner">
+	<nav class="nav nav--sticky">
+		<div class="nav__inner">
 			<router-link class="nav__brand wordmark" to="/">Tasks</router-link>
 
 			<div class="nav__links">
@@ -65,7 +65,7 @@ async function signOut() {
 					@click="menuOpen = !menuOpen"
 				>
 					<!-- Three bars drawn, not typed: no glyph for this reads reliably. -->
-					<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+					<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
 						<path d="M4 7h16M4 12h16M4 17h16" />
 					</svg>
 				</button>

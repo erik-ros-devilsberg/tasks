@@ -234,6 +234,15 @@ exists.
 **Token in `localStorage` is readable by any XSS on the origin.** Accepted: it matches the
 sibling app, and the server's token endpoint offers no httpOnly-cookie alternative.
 
+**The brand stylesheets are copied, never edited (2026-09-11).** `public/css/` holds the
+devilsberg-brand plugin's seven sheets byte for byte, plus `public/fonts/`, and a test fails the
+moment one drifts. Everything this app needs on top — row state colours, the floating add
+button, the nav menu, the full-bleed list — is in the one extra sheet `public/css/app.css`,
+linked from `index.html` after `main.css`. Each block in it is labelled ADDITION (the brand has
+no class for it) or OVERRIDE (the brand's rule was wrong for this app), so a later pass can
+decide what to push back into the brand. Markup adopted the brand's names where they existed:
+`.nav--sticky`, `.field__label` / `.field__input`, `.modal.is-open`, `ul.list`.
+
 ## Sprints
 
 ### App Foundation and Sign-In (2026-08-31)

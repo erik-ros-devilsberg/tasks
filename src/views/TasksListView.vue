@@ -67,7 +67,7 @@ async function destroy() {
 </script>
 
 <template>
-	<section class="app-view container">
+	<section class="container">
 		<!-- The wordmark in the nav already names this view; a second "Tasks"
 			 on screen is noise. The heading stays for structure. -->
 		<h1 class="visually-hidden">Tasks</h1>
@@ -94,45 +94,43 @@ async function destroy() {
 		</p>
 
 		<!-- One list, no headings: the background colour says what a group label used to. -->
-		<div class="list">
-			<ul>
-				<li
-					v-for="task in tasks.visible"
-					:key="task.id"
-					class="list__row"
-					:class="`list__row--${stateOf(task, tasks.now)}`"
+		<ul class="list">
+			<li
+				v-for="task in tasks.visible"
+				:key="task.id"
+				class="list__row"
+				:class="`list__row--${stateOf(task, tasks.now)}`"
+			>
+				<input
+					type="checkbox"
+					:checked="!isOpen(task)"
+					:aria-label="`${isOpen(task) ? 'Complete' : 'Reopen'} ${task.title}`"
+					@change="toggle(task, $event)"
+				/>
+
+				<button
+					class="list__primary"
+					type="button"
+					data-action="open"
+					@click="router.push(`/tasks/${task.id}/edit`)"
 				>
-					<input
-						type="checkbox"
-						:checked="!isOpen(task)"
-						:aria-label="`${isOpen(task) ? 'Complete' : 'Reopen'} ${task.title}`"
-						@change="toggle(task, $event)"
-					/>
+					{{ task.title }}
+					<span class="visually-hidden">{{ STATE_WORDS[stateOf(task, tasks.now)] }}</span>
+				</button>
 
-					<button
-						class="list__primary"
-						type="button"
-						data-action="open"
-						@click="router.push(`/tasks/${task.id}/edit`)"
-					>
-						{{ task.title }}
-						<span class="visually-hidden">{{ STATE_WORDS[stateOf(task, tasks.now)] }}</span>
-					</button>
-
-					<button
-						class="btn btn--ghost btn--icon btn--sm"
-						type="button"
-						data-action="delete"
-						:aria-label="`Delete ${task.title}`"
-						@click="deleting = task"
-					>
-						<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-							<path d="M4 7h16M9 7V5h6v2M7 7l1 13h8l1-13M10 11v6M14 11v6" />
-						</svg>
-					</button>
-				</li>
-			</ul>
-		</div>
+				<button
+					class="btn btn--ghost btn--icon btn--sm"
+					type="button"
+					data-action="delete"
+					:aria-label="`Delete ${task.title}`"
+					@click="deleting = task"
+				>
+					<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+						<path d="M4 7h16M9 7V5h6v2M7 7l1 13h8l1-13M10 11v6M14 11v6" />
+					</svg>
+				</button>
+			</li>
+		</ul>
 
 		<!--
 			Pinned to the bottom rather than sat in a toolbar: on a phone this is
@@ -146,7 +144,7 @@ async function destroy() {
 			aria-label="New task"
 			@click="router.push('/tasks/new')"
 		>
-			<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+			<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
 				<path d="M12 5v14M5 12h14" />
 			</svg>
 		</button>

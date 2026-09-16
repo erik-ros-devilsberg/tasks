@@ -1,11 +1,20 @@
-/*
- * Entry point only — it imports the parts and nothing else.
- *
- * The order here is the cascade order. Nothing but @import belongs in this
- * file; a rule added here would sit at an arbitrary point in that cascade.
- */
-@import url('./tokens.css');
-@import url('./base.css');
-@import url('./layout.css');
-@import url('./components.css');
-@import url('./utilities.css');
+/* ==========================================================================
+   Devilsberg CSS — single entry point.
+   Function-split files, imported in cascade order. Copy this directory to
+   `public/css/` and the sibling `fonts/` directory to `public/fonts/`, then
+   link only this file.
+
+     fonts      → @font-face declarations
+     tokens     → every colour, font, spacing, radius, motion value
+     base       → reset, canvas, typography, links, focus
+     layout     → container, grid, stack, nav, hero, app shells
+     components → btn, card, field, badge, alert, list, table, modal, …
+     utilities  → single-purpose helpers, last so they win
+   ========================================================================== */
+
+@import './fonts.css';
+@import './tokens.css';
+@import './base.css';
+@import './layout.css';
+@import './components.css';
+@import './utilities.css';

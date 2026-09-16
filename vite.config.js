@@ -2,6 +2,7 @@ import { fileURLToPath, URL } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { defineConfig, loadEnv } from 'vite';
 import vue from '@vitejs/plugin-vue';
+import { swVersionPlugin } from './build/swVersion.js';
 
 const pkg = JSON.parse(readFileSync(new URL('./version.json', import.meta.url), 'utf8'));
 
@@ -11,7 +12,7 @@ const pkg = JSON.parse(readFileSync(new URL('./version.json', import.meta.url), 
 const DEFAULT_SERVER_URL = 'http://127.0.0.1:8040';
 
 export default defineConfig(({ mode }) => ({
-	plugins: [vue()],
+	plugins: [vue(), swVersionPlugin(pkg.version)],
 	define: {
 		__APP_VERSION__: JSON.stringify(pkg.version),
 	},

@@ -1,9 +1,15 @@
 /*
  * Hand-written, not generated.
  *
- * Maintenance rule: adding a shell asset means adding it to SHELL *and*
- * bumping CACHE. addAll is atomic — one stale entry fails the whole install,
- * and a failed install means no offline app at all.
+ * Maintenance rule: adding a shell asset means adding it to SHELL. addAll is
+ * atomic — one stale entry fails the whole install, and a failed install
+ * means no offline app at all.
+ *
+ * CACHE is stamped with the app version at build time (build/swVersion.js),
+ * never bumped by hand. The browser only installs a new worker when this file
+ * changes, so a hand-bumped name that got forgotten once left every phone on
+ * the old bundle. The '-dev' name below is what the source ships with and
+ * what a build must never contain.
  *
  * main.css only @imports its parts, so every part is listed individually. The
  * bundle is listed by a fixed name, which is why vite.config.js turns off
@@ -11,7 +17,7 @@
  * is a route that fails offline.
  */
 
-const CACHE = 'coevta-tasks-v2';
+const CACHE = 'coevta-tasks-dev';
 
 const SHELL = [
 	'/',

@@ -242,7 +242,8 @@ refused. A change the server later rejects is reported on the list instead.
 
 Hand-written, not generated. The worker precaches a **literal** list of shell assets and
 `addAll` is atomic, so one stale entry fails the whole install and costs all offline support:
-adding an asset means adding it to `SHELL` *and* bumping `CACHE`. `/api/` is never served
+adding an asset means adding it to `SHELL`. `CACHE` is stamped from `version.json` at build
+time (see the 2026-09-16 note below), never bumped by hand. `/api/` is never served
 from the HTTP cache — that data belongs to the offline layer, which would have no way to know
 it was being handed a stale list.
 
@@ -500,3 +501,18 @@ screen that still looks signed in; the completion checkbox binds to the record r
 literal, and is re-synced by hand after a failure, because Vue will not re-patch a prop it
 believes is unchanged — without that a failed complete left a ticked box permanently claiming
 the task was done; and `toggle` now uses `isOpen` rather than its own narrower `=== null` test.
+
+## 2026-09-16 — service worker cache name stamped at build time
+
+The phone kept an old build after the styling rework shipped. Cause: the worker is
+cache-first and a browser only installs a new worker when `sw.js` is byte-different, and the
+hand-typed `CACHE = 'coevta-tasks-v2'` had not been bumped. The version in the footer could
+not tell the two builds apart either, because `version.json` is bumped by `/agile:commit` and
+that commit had been made by hand.
+
+`build/swVersion.js` is a Vite plugin that rewrites the `CACHE` line in `dist/sw.js` on
+`closeBundle` to `coevta-tasks-<version>`; the source worker ships as `coevta-tasks-dev`, a
+name a build must never contain. Every build is therefore a new worker, and every deploy
+updates installed phones without anyone remembering a step. `stampCache()` is the pure part
+and is what the tests cover; it throws rather than no-ops when the line is missing, because a
+silent miss would ship exactly the stale cache this exists to prevent.

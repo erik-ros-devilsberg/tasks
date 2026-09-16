@@ -321,7 +321,9 @@ an earlier one.
 
 Installability lives in `public/manifest.webmanifest` and the hand-written `public/sw.js`.
 The worker precaches a **literal** list of shell assets and `addAll` is atomic — adding an
-asset means adding it to `SHELL` *and* bumping `CACHE`. That is also why `vite.config.js`
+asset means adding it to `SHELL`. `CACHE` is never bumped by hand: `build/swVersion.js`
+stamps it with the `version.json` version on every build, so each deploy installs a fresh
+worker (the browser only installs one when `sw.js` changes). That is also why `vite.config.js`
 turns off content hashing and emits a single chunk: a filename the list cannot predict is a
 route that fails offline. `/api/` is never served from the HTTP cache — that data belongs to
 the offline layer.

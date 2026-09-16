@@ -16,7 +16,7 @@ vi.mock('vue-router', () => ({
 	RouterLink: { template: '<a><slot /></a>' },
 }));
 
-/** The browser's own view of the connection, which `useOnline` reads. */
+/** The browser's own view of the connection. */
 function setOnline(value) {
 	Object.defineProperty(window.navigator, 'onLine', { value, configurable: true });
 }
@@ -207,40 +207,37 @@ describe('when a sync finds the session gone', () => {
 	});
 });
 
-describe('the connection strip', () => {
-	it('says the app is offline, in the voice of a fact rather than a failure', async () => {
-		setOnline(false);
-		localStorage.setItem(TOKEN_KEY, 'a-token');
-
-		const wrapper = mountApp();
-
-		expect(wrapper.find('[data-state="offline"]').exists()).toBe(true);
-		expect(wrapper.find('.conn--offline').text()).toMatch(/saved here/i);
-	});
-
-	it('counts the changes that have not reached the server yet', async () => {
+/**
+ * The strip this replaces was inserted above <main>, so every save pushed the
+ * page down and pulled it back — a layout shift on the most ordinary action in
+ * the app. It also reported `navigator.onLine`, which says nothing about whether
+ * the server is reachable.
+ */
+describe('the shell when work is waiting to sync', () => {
+	it('does not move the page when a change is queued', async () => {
 		localStorage.setItem(TOKEN_KEY, 'a-token');
 		const wrapper = mountApp();
 		const tasks = useTasksStore();
 
+		const before = wrapper.find('main').html();
+
 		await tasks.create({ title: 'Buy milk', notes: null, due_at: null, duration: null });
 		await wrapper.vm.$nextTick();
 
-		expect(wrapper.find('[data-state="pending"]').text()).toMatch(/1 change waiting/i);
+		expect(wrapper.find('.conn').exists()).toBe(false);
+		expect(wrapper.find('main').html()).toBe(before);
 	});
 
-	it('says nothing at all when everything is synced', async () => {
+	it('says nothing when the browser reports itself offline', () => {
+		// Being offline is the app working as designed. The queue is durable and
+		// drains on its own, so there is nothing for the user to do about it.
+		setOnline(false);
 		localStorage.setItem(TOKEN_KEY, 'a-token');
 
 		const wrapper = mountApp();
 
+		expect(wrapper.find('[data-state="offline"]').exists()).toBe(false);
 		expect(wrapper.find('.conn').exists()).toBe(false);
-	});
-
-	it('stays out of the way of someone who is not signed in', () => {
-		setOnline(false);
-
-		expect(mountApp().find('.conn').exists()).toBe(false);
 	});
 });
 

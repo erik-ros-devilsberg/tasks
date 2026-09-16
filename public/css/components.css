@@ -1,442 +1,1318 @@
-/*
- * The shared vocabulary. Views reuse these classes rather than minting their
- * own — there is no .task-card and no .detail-panel. A modifier is added only
- * for a real visual variant.
- */
+/* ==========================================================================
+   Components — generic, reusable, BEM.
+   `.block`, `.block__element`, `.block--modifier`, `.is-state`.
 
-/* --- Surfaces ----------------------------------------------------------- */
+   Rules:
+     - One shared class per pattern. No `.task-card`; use `.card` + modifier.
+     - Add a modifier only for a real visual variant.
+     - Colours come from semantic tokens only. Error = fuchsia. Go = green.
+       Focus = white ring (base.css) — never red.
 
-.card {
-	padding: 1.25rem;
-	background: var(--field-bg);
-	border: 1px solid var(--border);
-	border-radius: var(--radius);
-}
+   Index: wordmark · link · btn · card · form/field · badge · tag · alert ·
+          list · table · modal · toolbar · tabs · avatar · spinner ·
+          progress · empty · watermark
+   ========================================================================== */
 
-.card--flush {
-	padding: 0;
-	overflow: hidden;
-}
+/* ---------- Wordmark ---------- */
 
-/* --- Lists -------------------------------------------------------------- */
-
-/*
- * Pulled out of the container's gutter so a row spans the whole width it is
- * given — the full screen on a phone, the container on a desktop. A row's
- * background is what states its status, and leaving the page colour down both
- * sides would turn that into a stripe instead of a row.
- */
-.list {
-	display: flex;
-	flex-direction: column;
-	margin: 0 calc(var(--container-pad) * -1);
-}
-
-.list__header {
-	position: sticky;
-	/* Clears the sticky nav, so a group label never hides behind it. */
-	top: 3.5rem;
-	z-index: 5;
-	padding: 0.25rem var(--container-pad);
-	background: var(--onyx);
-	border-bottom: 1px solid var(--border);
-	color: var(--blue-slate);
+.wordmark {
 	font-family: var(--font-title);
-	font-size: 0.875rem;
 	font-weight: 700;
-	letter-spacing: 0.1em;
-	text-transform: uppercase;
+	text-transform: lowercase;
+	letter-spacing: 0.04em;
+	color: var(--fg);
 }
 
-.list__row {
-	display: flex;
-	align-items: baseline;
-	gap: 0.75rem;
-	width: 100%;
-	padding: 0.75rem var(--container-pad);
-	background: none;
-	border: none;
-	border-bottom: 1px solid var(--border);
-	text-align: left;
-	transition: background var(--transition);
+/* ---------- Link variants ---------- */
+
+.link--accent {
+	color: var(--accent);
 }
 
-.list__row:hover {
-	background: var(--field-bg);
+.link--accent:hover {
+	color: var(--fg);
 }
 
-/*
- * Also the row's own control — clicking the name opens the task. Styled to
- * disappear as a button so the row still reads as a line of text.
- */
-.list__primary {
-	flex: 1 1 auto;
-	min-width: 0;
-	padding: 0;
-	background: none;
-	border: none;
-	overflow: hidden;
-	color: inherit;
-	font: inherit;
-	text-align: left;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	cursor: pointer;
+.link--quiet {
+	text-decoration: none;
 }
 
-/*
- * State by colour, because the row carries no badge to say it. Every fill is
- * paired with the ink that stays legible on it — see tokens.css.
- */
-.list__row--overdue {
-	background: var(--row-overdue);
-	color: var(--row-overdue-ink);
+.link--quiet:hover {
+	text-decoration: underline;
 }
 
-.list__row--today {
-	background: var(--row-today);
-	color: var(--row-today-ink);
-}
-
-.list__row--upcoming {
-	background: var(--row-upcoming);
-	color: var(--row-upcoming-ink);
-}
-
-.list__row--undated {
-	background: var(--row-undated);
-	color: var(--row-undated-ink);
-}
-
-.list__row--completed {
-	background: var(--row-completed);
-	color: var(--row-completed-ink);
-}
-
-/*
- * Struck through and dimmed, so a finished task is something the eye skips on
- * the way past rather than a line it has to read to dismiss.
- */
-.list__row--completed .list__primary {
-	text-decoration: line-through;
-}
-
-/* The hover tint would wash the state colour out, so it only lifts the row. */
-.list__row[class*='list__row--']:hover {
-	filter: brightness(1.12);
-}
-
-.list__secondary {
-	flex: 0 1 auto;
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	color: var(--gray-mid);
-	font-size: 0.875rem;
-}
-
-/* --- Buttons ------------------------------------------------------------ */
+/* ---------- Buttons ---------- */
 
 .btn {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	gap: 0.5rem;
-	padding: 0.6rem 1.2rem;
-	background: var(--field-bg);
-	border: 1px solid var(--border);
-	border-radius: var(--radius);
-	color: var(--ghost-white);
+	gap: var(--space-2);
 	font-family: var(--font-title);
 	font-size: 0.9rem;
 	font-weight: 500;
-	letter-spacing: 0.1em;
+	line-height: 1;
 	text-transform: uppercase;
+	letter-spacing: var(--tracking-label);
+	text-decoration: none;
+	white-space: nowrap;
+	padding: 1rem 2.5rem;
+	border: 1px solid transparent;
+	border-radius: var(--radius);
+	background-color: var(--action);
+	color: var(--ghost-white);
 	cursor: pointer;
-	transition: background var(--transition), border-color var(--transition), color var(--transition);
+	transition:
+		background-color var(--transition),
+		border-color var(--transition),
+		color var(--transition),
+		transform var(--transition);
 }
 
 .btn:hover {
-	background: var(--grey-dark);
+	background-color: var(--action-hover);
+	color: var(--ghost-white);
+	text-decoration: none;
+	transform: translateY(-2px);
 }
+
+.btn:active {
+	transform: translateY(0);
+}
+
+.btn[disabled],
+.btn.is-disabled,
+.btn[aria-disabled='true'] {
+	opacity: 0.5;
+	cursor: not-allowed;
+	pointer-events: none;
+	transform: none;
+}
+
+/* Variants */
 
 .btn--primary {
-	background: var(--blue-slate);
-	border-color: var(--blue-slate);
-}
-
-.btn--primary:hover {
-	background: var(--sea-green);
-	border-color: var(--sea-green);
-}
-
-.btn--ghost {
-	background: none;
-}
-
-.btn--danger {
-	border-color: var(--hot-fuchsia);
-	color: var(--hot-fuchsia);
-}
-
-.btn--danger:hover {
-	background: var(--hot-fuchsia);
+	background-color: var(--action);
 	color: var(--ghost-white);
 }
 
+.btn--accent {
+	background-color: var(--accent);
+	color: var(--ghost-white);
+}
+
+.btn--accent:hover {
+	background-color: var(--accent-dark);
+}
+
+.btn--success {
+	background-color: var(--success);
+	color: var(--ghost-white);
+}
+
+.btn--success:hover {
+	background-color: var(--success);
+	filter: brightness(1.15);
+}
+
+.btn--ghost {
+	background-color: transparent;
+	border-color: var(--border-strong);
+	color: var(--fg-soft);
+}
+
+.btn--ghost:hover {
+	background-color: var(--bg-raised);
+	color: var(--fg);
+	transform: none;
+}
+
+.btn--danger {
+	background-color: transparent;
+	border-color: var(--error);
+	color: var(--error);
+}
+
+.btn--danger:hover {
+	background-color: var(--error);
+	color: var(--ghost-white);
+}
+
+.btn--text {
+	background-color: transparent;
+	color: var(--fg-soft);
+	padding-left: var(--space-2);
+	padding-right: var(--space-2);
+}
+
+.btn--text:hover {
+	background-color: transparent;
+	color: var(--fg);
+	transform: none;
+}
+
+/* Sizes */
+
 .btn--sm {
-	padding: 0.35rem 0.7rem;
+	padding: 0.5rem 1rem;
 	font-size: 0.75rem;
 }
 
-/*
- * The one control worth putting under a thumb. Fixed to the viewport, clear of
- * whatever the device carves out at the bottom.
- */
-.btn--fab {
-	position: fixed;
-	/*
-	 * Tracks the container's right edge on a wide screen instead of drifting off
-	 * to the far corner, and falls back to the plain gutter on anything narrower
-	 * than the container.
-	 */
-	right: max(var(--container-pad), calc(50vw - var(--container-max) / 2 + var(--container-pad)));
-	bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
-	z-index: 20;
-	width: 3.5rem;
-	height: 3.5rem;
-	border-radius: 50%;
-	box-shadow: 0 4px 12px var(--overlay);
+.btn--lg {
+	padding: 1.25rem 3rem;
+	font-size: 1rem;
 }
 
-/* Square, for a button whose whole label is its icon. */
+.btn--block {
+	display: flex;
+	width: 100%;
+}
+
+/* Square icon-only button. Give it an aria-label. */
 .btn--icon {
-	padding: 0.5rem;
-	line-height: 0;
+	width: 40px;
+	height: 40px;
+	padding: 0;
+	border-radius: var(--radius-sm);
+	background-color: transparent;
+	border-color: var(--border-strong);
+	color: var(--fg-soft);
+}
+
+.btn--icon:hover {
+	background-color: var(--bg-raised);
+	color: var(--fg);
+	transform: none;
 }
 
 .btn--icon.btn--sm {
-	padding: 0.3rem;
+	width: 32px;
+	height: 32px;
 }
 
-.icon {
-	width: 1.25rem;
-	height: 1.25rem;
+.btn svg {
+	width: 1.1em;
+	height: 1.1em;
 	fill: none;
 	stroke: currentColor;
 	stroke-width: 2;
-	stroke-linecap: round;
-	stroke-linejoin: round;
 }
 
-.btn:disabled {
-	opacity: 0.5;
-	cursor: default;
+.btn--icon svg {
+	width: 1rem;
+	height: 1rem;
 }
 
-/* --- Forms -------------------------------------------------------------- */
+/* Loading: swap label for spinner via .is-loading */
+.btn.is-loading {
+	position: relative;
+	color: transparent;
+	pointer-events: none;
+}
+
+.btn.is-loading::after {
+	content: '';
+	position: absolute;
+	width: 1em;
+	height: 1em;
+	border: 2px solid var(--white-a40);
+	border-top-color: var(--ghost-white);
+	border-radius: var(--radius-round);
+	animation: spin 0.7s linear infinite;
+}
+
+/* Group of buttons, joined. */
+.btn-group {
+	display: inline-flex;
+}
+
+.btn-group .btn {
+	border-radius: 0;
+}
+
+.btn-group .btn:first-child {
+	border-top-left-radius: var(--radius);
+	border-bottom-left-radius: var(--radius);
+}
+
+.btn-group .btn:last-child {
+	border-top-right-radius: var(--radius);
+	border-bottom-right-radius: var(--radius);
+}
+
+.btn-group .btn + .btn {
+	margin-left: -1px;
+}
+
+/* ---------- Card ----------
+   The one surface. Header / body / footer are optional. */
+
+.card {
+	display: flex;
+	flex-direction: column;
+	background-color: var(--bg-raised);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	color: inherit;
+	text-decoration: none;
+	transition:
+		transform var(--transition),
+		box-shadow var(--transition),
+		border-color var(--transition),
+		background-color var(--transition);
+}
+
+.card > :last-child {
+	margin-bottom: 0;
+}
+
+.card__header,
+.card__body,
+.card__footer {
+	padding: var(--space-5);
+}
+
+.card__header {
+	border-bottom: 1px solid var(--border);
+}
+
+.card__footer {
+	margin-top: auto;
+	border-top: 1px solid var(--border);
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+}
+
+.card__title {
+	font-size: 1.25rem;
+	margin-bottom: var(--space-2);
+}
+
+.card__meta {
+	font-family: var(--font-title);
+	font-size: var(--text-xs);
+	letter-spacing: var(--tracking-label);
+	text-transform: uppercase;
+	color: var(--fg-meta);
+	margin-bottom: var(--space-2);
+}
+
+.card__desc {
+	color: var(--fg-soft);
+	font-size: 0.9375rem;
+}
+
+/* Variants */
+
+.card--flush {
+	overflow: hidden;
+}
+
+.card--flush .card__body {
+	padding: 0;
+}
+
+.card--dark {
+	background-color: var(--onyx);
+	color: var(--ghost-white);
+}
+
+/* Light card: add .theme-light (tokens.css) — every child re-themes.
+   Case-study pattern = .card.theme-light + .card__header--dark. */
+.theme-light.card {
+	background-color: var(--bg-raised);
+	border-color: var(--border);
+	color: var(--fg);
+}
+
+.card__header--dark {
+	background-color: var(--onyx);
+	color: var(--ghost-white);
+	border-color: var(--onyx);
+	border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.card--accent {
+	border-left: 3px solid var(--accent);
+}
+
+.card--success {
+	border-left: 3px solid var(--success);
+}
+
+.card--error {
+	border-left: 3px solid var(--error);
+}
+
+/* Clickable card: lift + shadow (brand.md §8). */
+.card--link {
+	cursor: pointer;
+}
+
+.card--link:hover {
+	transform: translateY(-2px);
+	box-shadow: var(--shadow-md);
+	border-color: var(--border-strong);
+	color: inherit;
+}
+
+/* Borderless row-style card (blog listing). */
+.card--row {
+	background: none;
+	border: 0;
+	border-bottom: 1px solid var(--border);
+	border-radius: 0;
+}
+
+.card--row:hover {
+	transform: translateX(4px);
+	box-shadow: none;
+}
+
+.card--row .card__body {
+	padding: var(--space-4) 0;
+}
+
+/* ---------- Forms ---------- */
 
 .form {
 	display: flex;
 	flex-direction: column;
-	gap: 1rem;
-	max-width: 40rem;
+	gap: var(--space-4);
 }
 
+.form--narrow {
+	max-width: 24rem;
+}
+
+/* Actions sit at the right end, in DOM order: cancel/secondary first, go last.
+   A danger button is pushed to the left, away from the go button. */
+.form__actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: var(--space-3);
+	margin-top: var(--space-2);
+}
+
+.form__actions .btn--danger,
+.modal__actions .btn--danger {
+	margin-right: auto;
+}
+
+.form__error,
+.form__success {
+	font-size: var(--text-sm);
+	font-weight: 600;
+}
+
+.form__error {
+	color: var(--error);
+}
+
+.form__success {
+	color: var(--success);
+}
+
+/* Fieldset as a group. */
+.form__group {
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	padding: var(--space-4);
+	margin: 0;
+	min-width: 0;
+}
+
+.form__group > legend {
+	font-family: var(--font-title);
+	font-size: var(--text-xs);
+	letter-spacing: var(--tracking-label);
+	text-transform: uppercase;
+	color: var(--fg-meta);
+	padding: 0 var(--space-2);
+}
+
+/* Field = label + control + help/error. */
 .field {
 	display: flex;
 	flex-direction: column;
 	gap: 0.35rem;
+	min-width: 0;
 }
 
-.field > label {
-	color: var(--blue-slate);
+.field__label {
 	font-family: var(--font-title);
-	font-size: 0.75rem;
-	font-weight: 700;
-	letter-spacing: 0.1em;
+	font-size: var(--text-xs);
+	font-weight: 500;
 	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--fg-meta);
+	transition: color var(--transition);
 }
 
-.field input,
-.field textarea,
-.field select {
-	padding: 0.6rem 0.75rem;
-	background: var(--field-bg);
-	border: 1px solid var(--border);
-	border-radius: var(--radius);
-	color: var(--ghost-white);
+.field:focus-within .field__label {
+	color: var(--fg);
 }
 
-.field textarea {
-	min-height: 6rem;
-	resize: vertical;
+.field__required {
+	color: var(--accent);
+}
+
+.field__help {
+	font-size: var(--text-xs);
+	color: var(--fg-meta);
 }
 
 .field__error {
-	color: var(--hot-fuchsia);
-	font-size: 0.875rem;
+	font-size: 0.8rem;
+	color: var(--error);
 }
 
+.field__success {
+	font-size: 0.8rem;
+	color: var(--success);
+}
+
+/* The control. */
+.field__input {
+	width: 100%;
+	font-family: var(--font-body);
+	font-size: 0.95rem;
+	line-height: 1.4;
+	color: var(--fg);
+	background-color: var(--bg-field);
+	border: 1px solid var(--border-field);
+	border-radius: var(--radius-sm);
+	padding: 0.6rem 0.75rem;
+	transition:
+		border-color var(--transition),
+		background-color var(--transition);
+}
+
+.field__input::placeholder {
+	color: var(--fg-meta);
+	opacity: 1;
+}
+
+.field__input:hover {
+	border-color: var(--fg-soft);
+}
+
+/* Focus: the border brightens to white — no ring, no extra weight. Never red. */
+.field__input:focus,
+.field__input:focus-visible {
+	border-color: var(--focus);
+	outline: none;
+}
+
+.field__input:disabled,
+.field__input[readonly] {
+	background-color: var(--bg-muted);
+	color: var(--fg-soft);
+	cursor: not-allowed;
+}
+
+.field__input[readonly] {
+	cursor: default;
+}
+
+textarea.field__input {
+	min-height: 8rem;
+	resize: vertical;
+}
+
+select.field__input {
+	appearance: none;
+	padding-right: 2.25rem;
+	background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' fill='none' stroke='%23becad1' stroke-width='2'/></svg>");
+	background-repeat: no-repeat;
+	background-position: right 0.75rem center;
+}
+
+select.field__input option {
+	background-color: var(--onyx);
+	color: var(--ghost-white);
+}
+
+/* Validation states — on the field, so label + help colour too. */
+.field--error .field__input {
+	border-color: var(--error);
+}
+
+.field--error .field__label {
+	color: var(--error);
+}
+
+.field--success .field__input {
+	border-color: var(--success);
+}
+
+.field--success .field__label {
+	color: var(--success);
+}
+
+/* Focus still wins: a focused error field shows white, not red. */
+.field--error .field__input:focus,
+.field--success .field__input:focus {
+	border-color: var(--focus);
+}
+
+/* Label beside control. */
 .field--inline {
 	flex-direction: row;
 	align-items: center;
-	gap: 0.5rem;
+	gap: var(--space-2);
 }
 
-.form__actions {
+.field--inline .field__label {
+	flex: 0 0 auto;
+	min-width: 90px;
+}
+
+/* Fields side by side. */
+.field-row {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 0.75rem;
+	gap: var(--space-4);
 }
 
-/* --- Modal -------------------------------------------------------------- */
+.field-row > .field {
+	flex: 1 1 12rem;
+}
+
+/* Input with a leading/trailing addon. */
+.field__addon {
+	display: flex;
+	align-items: stretch;
+}
+
+.field__addon > .field__input {
+	flex: 1;
+	min-width: 0;
+}
+
+.field__addon > .field__input:not(:first-child) {
+	border-top-left-radius: 0;
+	border-bottom-left-radius: 0;
+}
+
+.field__addon > .field__input:not(:last-child) {
+	border-top-right-radius: 0;
+	border-bottom-right-radius: 0;
+}
+
+.field__addon > .btn {
+	border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.field__prefix,
+.field__suffix {
+	display: inline-flex;
+	align-items: center;
+	padding: 0 0.75rem;
+	background-color: var(--bg-inset);
+	border: 1px solid var(--border-field);
+	color: var(--fg-meta);
+	font-size: var(--text-sm);
+}
+
+.field__prefix {
+	border-right: 0;
+	border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+
+.field__suffix {
+	border-left: 0;
+	border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+/* Checkbox / radio — .choice wraps the control and its text. */
+.choice {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+	cursor: pointer;
+	font-size: 0.95rem;
+}
+
+.choice__input {
+	appearance: none;
+	flex: 0 0 auto;
+	width: 1.1rem;
+	height: 1.1rem;
+	margin: 0;
+	background-color: var(--bg-field);
+	border: 1px solid var(--border-field);
+	border-radius: var(--radius-sm);
+	display: grid;
+	place-content: center;
+	cursor: pointer;
+	transition: background-color var(--transition), border-color var(--transition);
+}
+
+.choice__input[type='radio'] {
+	border-radius: var(--radius-round);
+}
+
+.choice__input::before {
+	content: '';
+	width: 0.55rem;
+	height: 0.55rem;
+	transform: scale(0);
+	transition: transform var(--transition);
+	background-color: var(--ghost-white);
+	clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+}
+
+.choice__input[type='radio']::before {
+	clip-path: none;
+	border-radius: var(--radius-round);
+}
+
+.choice__input:checked {
+	background-color: var(--success);
+	border-color: var(--success);
+}
+
+.choice__input:checked::before {
+	transform: scale(1);
+}
+
+.choice__input:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.choice__input:disabled + .choice__label {
+	color: var(--fg-meta);
+	cursor: not-allowed;
+}
+
+/* Switch — a checkbox styled as a toggle. */
+.choice__input--switch {
+	width: 2.25rem;
+	height: 1.25rem;
+	border-radius: var(--radius-pill);
+	place-content: center start;
+	padding: 0 2px;
+}
+
+.choice__input--switch::before {
+	width: 0.9rem;
+	height: 0.9rem;
+	clip-path: none;
+	border-radius: var(--radius-round);
+	background-color: var(--fg-soft);
+	transform: scale(1) translateX(0);
+	transition: transform var(--transition), background-color var(--transition);
+}
+
+.choice__input--switch:checked::before {
+	background-color: var(--ghost-white);
+	transform: scale(1) translateX(1rem);
+}
+
+/* Stack of choices. */
+.choice-list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+}
+
+.choice-list--inline {
+	flex-direction: row;
+	flex-wrap: wrap;
+	gap: var(--space-4);
+}
+
+/* Range */
+.field__input[type='range'] {
+	padding: 0;
+	border: 0;
+	background: transparent;
+	accent-color: var(--success);
+}
+
+/* Range has no border to brighten, so it keeps the global ring. */
+.field__input[type='range']:focus-visible {
+	outline: var(--focus-width) solid var(--focus);
+	outline-offset: var(--focus-offset);
+}
+
+/* ---------- Badge — small uppercase status pill ---------- */
+
+.badge {
+	display: inline-block;
+	padding: 0.1rem 0.4rem;
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius-sm);
+	color: var(--fg-soft);
+	font-family: var(--font-title);
+	font-size: 0.7rem;
+	font-weight: 500;
+	line-height: 1.5;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+	white-space: nowrap;
+	vertical-align: middle;
+}
+
+.badge--accent {
+	border-color: transparent;
+	background-color: var(--accent-bg);
+	color: var(--accent);
+}
+
+.badge--success {
+	border-color: var(--success);
+	color: var(--success);
+}
+
+.badge--error {
+	border-color: var(--error);
+	color: var(--error);
+}
+
+.badge--info {
+	border-color: var(--info);
+	color: var(--fg-soft);
+}
+
+.badge--solid {
+	border-color: transparent;
+	background-color: var(--action);
+	color: var(--ghost-white);
+}
+
+.badge--solid.badge--success {
+	background-color: var(--success);
+}
+
+.badge--solid.badge--error {
+	background-color: var(--error);
+}
+
+.badge--dot::before {
+	content: '';
+	display: inline-block;
+	width: 0.45em;
+	height: 0.45em;
+	margin-right: 0.4em;
+	border-radius: var(--radius-round);
+	background-color: currentColor;
+	vertical-align: middle;
+}
+
+/* ---------- Tag — quiet keyword chip ---------- */
+
+.tag {
+	display: inline-block;
+	padding: 0.25rem 0.625rem;
+	border-radius: var(--radius-sm);
+	background-color: var(--bg-inset);
+	color: var(--fg-soft);
+	font-size: 0.725rem;
+	font-weight: 600;
+	text-decoration: none;
+	transition: background-color var(--transition), color var(--transition);
+}
+
+a.tag:hover,
+button.tag:hover {
+	background-color: var(--fg-meta);
+	color: var(--ghost-white);
+	color: var(--fg);
+}
+
+.tag-list {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.375rem;
+	list-style: none;
+	padding: 0;
+	margin: 0;
+}
+
+.tag-list li + li {
+	margin-top: 0;
+}
+
+/* ---------- Alert — inline message block ---------- */
+
+.alert {
+	display: flex;
+	gap: var(--space-3);
+	padding: var(--space-4);
+	border: 1px solid var(--border-strong);
+	border-left-width: 3px;
+	border-radius: var(--radius-sm);
+	background-color: var(--bg-raised);
+	color: var(--fg);
+}
+
+.alert > :last-child {
+	margin-bottom: 0;
+}
+
+.alert__title {
+	font-family: var(--font-title);
+	font-size: var(--text-sm);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	margin-bottom: var(--space-1);
+}
+
+.alert__body {
+	flex: 1;
+	font-size: var(--text-sm);
+}
+
+.alert__close {
+	margin-left: auto;
+}
+
+.alert--success {
+	border-color: var(--success);
+	background-color: var(--success-bg);
+}
+
+.alert--success .alert__title {
+	color: var(--success);
+}
+
+.alert--error {
+	border-color: var(--error);
+	background-color: var(--error-bg);
+}
+
+.alert--error .alert__title {
+	color: var(--error);
+}
+
+.alert--info {
+	border-color: var(--info);
+	background-color: var(--info-bg);
+}
+
+/* Bare text states — when a block is too much. */
+.error {
+	color: var(--error);
+	font-weight: 600;
+}
+
+.success {
+	color: var(--success);
+	font-weight: 600;
+}
+
+.notice {
+	color: var(--fg-soft);
+}
+
+/* ---------- List — quiet rows with a subtle hover ---------- */
+
+.list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	border-top: 1px solid var(--border);
+}
+
+.list li + li {
+	margin-top: 0;
+}
+
+.list__header {
+	position: sticky;
+	top: 0;
+	z-index: var(--z-sticky);
+	padding: 0.35rem var(--space-2);
+	background-color: var(--bg);
+	border-bottom: 1px solid var(--border-strong);
+	color: var(--fg-meta);
+	font-family: var(--font-title);
+	font-size: var(--text-xs);
+	letter-spacing: var(--tracking-label);
+	text-transform: uppercase;
+}
+
+.list__row {
+	display: flex;
+	align-items: center;
+	gap: var(--space-4);
+	width: 100%;
+	padding: 0.9rem var(--space-2);
+	border: 0;
+	border-bottom: 1px solid var(--border);
+	background: none;
+	color: var(--fg);
+	text-align: left;
+	text-decoration: none;
+	transition: background-color var(--transition);
+}
+
+a.list__row,
+button.list__row {
+	cursor: pointer;
+}
+
+a.list__row:hover,
+button.list__row:hover {
+	background-color: var(--bg-hover);
+	color: var(--fg);
+}
+
+.list__row.is-active {
+	background-color: var(--bg-raised);
+}
+
+.list__body {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	flex: 1;
+}
+
+.list__primary {
+	font-weight: 600;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.list__secondary {
+	color: var(--fg-soft);
+	font-size: 0.85rem;
+}
+
+.list__actions {
+	display: flex;
+	gap: var(--space-2);
+	margin-left: auto;
+	flex: 0 0 auto;
+}
+
+.list__row.is-done .list__primary {
+	color: var(--fg-soft);
+	text-decoration: line-through;
+}
+
+/* ---------- Table ---------- */
+
+.table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: var(--text-sm);
+}
+
+.table th,
+.table td {
+	padding: 0.75rem var(--space-3);
+	text-align: left;
+	vertical-align: top;
+	border-bottom: 1px solid var(--border);
+}
+
+.table th {
+	font-family: var(--font-title);
+	font-size: var(--text-xs);
+	font-weight: 500;
+	letter-spacing: var(--tracking-label);
+	text-transform: uppercase;
+	color: var(--fg-meta);
+	border-bottom-color: var(--border-strong);
+}
+
+.table tbody tr {
+	transition: background-color var(--transition);
+}
+
+.table--hover tbody tr:hover {
+	background-color: var(--bg-hover);
+}
+
+.table--striped tbody tr:nth-child(even) {
+	background-color: var(--bg-muted);
+}
+
+.table--compact th,
+.table--compact td {
+	padding: 0.4rem var(--space-2);
+}
+
+.table .is-numeric {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+
+.table-wrap {
+	overflow-x: auto;
+	margin-bottom: var(--space-5);
+}
+
+.table-wrap > .table {
+	margin-bottom: 0;
+}
+
+/* ---------- Modal ---------- */
 
 .modal {
 	position: fixed;
 	inset: 0;
-	z-index: 50;
+	z-index: var(--z-modal);
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	padding: 1rem;
-	background: var(--overlay);
+	padding: var(--space-5);
+	background-color: var(--overlay);
+	opacity: 0;
+	visibility: hidden;
+	transition: opacity var(--transition-slow), visibility var(--transition-slow);
+}
+
+.modal.is-open,
+.modal[open] {
+	opacity: 1;
+	visibility: visible;
 }
 
 .modal__dialog {
 	width: 100%;
 	max-width: 400px;
-	padding: 2rem;
-	background: var(--onyx);
-	border: 1px solid var(--border);
+	max-height: calc(100vh - 2 * var(--space-5));
+	overflow-y: auto;
+	padding: var(--space-6);
+	background-color: var(--onyx);
+	color: var(--ghost-white);
+	border: 1px solid var(--border-strong);
 	border-radius: var(--radius);
+}
+
+.modal__dialog--wide {
+	max-width: 720px;
+}
+
+.modal__header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: var(--space-4);
+	margin-bottom: var(--space-4);
+}
+
+.modal__title {
+	margin: 0;
+	font-size: var(--text-xl);
 }
 
 .modal__actions {
 	display: flex;
 	justify-content: flex-end;
-	gap: 0.75rem;
-	margin-top: 1.5rem;
+	flex-wrap: wrap;
+	gap: var(--space-3);
+	margin-top: var(--space-5);
 }
 
-/* --- Menu -------------------------------------------------------------- */
-
-.menu {
+/* Native <dialog> support. */
+dialog.modal {
 	position: fixed;
-	inset: 0;
-	z-index: 40;
-	display: flex;
-	justify-content: flex-end;
-	align-items: flex-start;
-	padding: 3.5rem 1rem 1rem;
-	background: var(--overlay);
-}
-
-.menu__panel {
-	display: flex;
-	flex-direction: column;
+	border: 0;
+	padding: 0;
+	margin: 0;
 	width: 100%;
-	max-width: 260px;
-	padding: 0.5rem;
+	height: 100%;
+	max-width: none;
+	max-height: none;
+	background: transparent;
+	display: none;
 }
 
-.menu__item {
-	padding: 0.75rem 1rem;
+dialog.modal[open] {
+	display: flex;
+}
+
+dialog.modal::backdrop {
+	background-color: var(--overlay);
+}
+
+/* ---------- Toolbar — search + actions above a list ---------- */
+
+.toolbar {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--space-4);
+	margin: var(--space-5) 0 var(--space-2);
+}
+
+.toolbar > .field {
+	flex: 1 1 14rem;
+}
+
+.toolbar__actions {
+	display: flex;
+	gap: var(--space-2);
+	margin-left: auto;
+}
+
+/* ---------- Tabs ---------- */
+
+.tabs {
+	display: flex;
+	gap: var(--space-1);
+	border-bottom: 1px solid var(--border);
+	list-style: none;
+	padding: 0;
+	margin: 0 0 var(--space-5);
+	overflow-x: auto;
+}
+
+.tabs li + li {
+	margin-top: 0;
+}
+
+.tabs__tab {
+	display: inline-block;
+	padding: var(--space-3) var(--space-4);
+	margin-bottom: -1px;
+	border: 0;
+	border-bottom: 2px solid transparent;
 	background: none;
-	border: none;
-	border-radius: var(--radius-sm);
-	color: var(--ghost-white);
+	color: var(--fg-soft);
 	font-family: var(--font-title);
-	font-size: 0.9rem;
-	font-weight: 500;
-	letter-spacing: 0.1em;
-	text-align: left;
+	font-size: 0.8rem;
+	letter-spacing: 0.08em;
 	text-transform: uppercase;
+	text-decoration: none;
+	white-space: nowrap;
 	cursor: pointer;
-	transition: background var(--transition);
+	transition: color var(--transition), border-color var(--transition);
 }
 
-.menu__item:hover {
-	background: var(--field-bg);
+.tabs__tab:hover {
+	color: var(--fg);
 }
 
-/* --- State -------------------------------------------------------------- */
-
-.error {
-	padding: 0.6rem 0.75rem;
-	border: 1px solid var(--hot-fuchsia);
-	border-radius: var(--radius);
-	color: var(--hot-fuchsia);
+.tabs__tab.is-active,
+.tabs__tab[aria-selected='true'] {
+	color: var(--fg);
+	border-bottom-color: var(--accent);
 }
 
-.notice {
-	padding: 0.6rem 0.75rem;
-	background: var(--field-bg);
-	border: 1px solid var(--border);
-	border-radius: var(--radius);
-	color: var(--gray-mid);
+/* ---------- Avatar ---------- */
+
+.avatar {
+	width: 40px;
+	height: 40px;
+	border-radius: var(--radius-round);
+	background-color: var(--bg-raised);
+	border: 1px solid var(--border-strong);
+	object-fit: cover;
+	display: inline-grid;
+	place-items: center;
+	font-family: var(--font-title);
+	font-size: var(--text-sm);
+	color: var(--fg-soft);
+	flex: 0 0 auto;
 }
 
-/*
- * Overdue is never signalled by colour alone — the row also carries a text
- * label. This just makes it findable at a glance for those who can see it.
- */
-.is-overdue {
-	color: var(--hot-fuchsia);
+.avatar--sm {
+	width: 28px;
+	height: 28px;
+	font-size: var(--text-xs);
 }
 
-.badge {
-	padding: 0.1rem 0.4rem;
-	border: 1px solid var(--blue-slate);
-	border-radius: var(--radius-sm);
-	color: var(--gray-mid);
-	font-size: 0.7rem;
-	letter-spacing: 0.05em;
-	text-transform: uppercase;
+.avatar--lg {
+	width: 64px;
+	height: 64px;
+	font-size: var(--text-lg);
+}
+
+/* ---------- Spinner ---------- */
+
+.spinner {
+	display: inline-block;
+	width: 1.25rem;
+	height: 1.25rem;
+	border: 2px solid var(--slate-a40);
+	border-top-color: var(--fg);
+	border-radius: var(--radius-round);
+	animation: spin 0.7s linear infinite;
+}
+
+.spinner--lg {
+	width: 2.5rem;
+	height: 2.5rem;
+	border-width: 3px;
+}
+
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/* ---------- Progress ---------- */
+
+.progress {
+	width: 100%;
+	height: 0.5rem;
+	overflow: hidden;
+	border-radius: var(--radius-pill);
+	background-color: var(--bg-inset);
+}
+
+.progress__bar {
+	height: 100%;
+	width: 0;
+	background-color: var(--success);
+	transition: width var(--transition-slow);
+}
+
+.progress--accent .progress__bar {
+	background-color: var(--accent);
+}
+
+/* ---------- Empty state ---------- */
+
+.empty {
+	padding: var(--space-8) var(--space-4);
+	text-align: center;
+	color: var(--fg-soft);
+}
+
+.empty__title {
+	color: var(--fg);
+	margin-bottom: var(--space-2);
+}
+
+/* ---------- Watermark — Streetag, decorative, aria-hidden ---------- */
+
+.watermark {
+	position: absolute;
+	right: 0;
+	bottom: 0;
+	z-index: 0;
+	font-family: var(--font-tag);
+	font-size: clamp(4rem, 15vw, 12rem);
+	line-height: 1;
+	color: var(--fg);
+	opacity: 0.04;
+	pointer-events: none;
+	user-select: none;
 	white-space: nowrap;
 }
 
-.badge--overdue {
-	border-color: var(--hot-fuchsia);
-	color: var(--hot-fuchsia);
-}
-
-/*
- * Not a warning. The change is saved — this says only that the server has not
- * been told yet, which is why the same task may look different elsewhere for
- * now. Amber rather than fuchsia, because nothing is wrong.
- */
-.badge--pending {
-	border-color: var(--row-today);
-	color: var(--row-today);
-}
-
-/*
- * The connection strip, under the nav. Being offline is the app working as
- * designed, so it is stated in the same voice as everything else rather than
- * dressed up as an error.
- */
-.conn {
-	padding: 0.4rem var(--container-pad);
-	background: var(--field-bg);
-	border-bottom: 1px solid var(--border);
-	color: var(--gray-mid);
-	font-size: 0.8rem;
-	text-align: center;
-}
-
-.conn--offline {
-	background: var(--grey-dark);
-	color: var(--ghost-white);
-}
+/* ---------- Breakpoints ---------- */
 
 @media (max-width: 400px) {
 	.modal__dialog {
-		padding: 1.25rem;
+		padding: var(--space-5);
 	}
 
-	.modal__actions {
-		flex-direction: column-reverse;
+	.btn {
+		padding-left: 1.5rem;
+		padding-right: 1.5rem;
 	}
 }

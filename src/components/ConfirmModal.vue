@@ -41,7 +41,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-	<div class="modal" @click.self="emit('cancel')" @keydown.esc="emit('cancel')" @keydown.tab="trap">
+	<div class="modal is-open" @click.self="emit('cancel')" @keydown.esc="emit('cancel')" @keydown.tab="trap">
 		<div class="modal__dialog card" role="dialog" aria-modal="true" :aria-label="title">
 			<h2>{{ title }}</h2>
 			<p v-if="body">{{ body }}</p>

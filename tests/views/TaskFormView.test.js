@@ -475,3 +475,24 @@ describe('deleting from the form', () => {
 		expect(wrapper.find('[data-action="delete"]').exists()).toBe(false);
 	});
 });
+
+/**
+ * `.form__actions` is a plain right-aligned flex row, so DOM order is visual order:
+ * the go button has to come last in the markup to sit rightmost on screen.
+ */
+describe('the order of the form actions', () => {
+	const labels = (wrapper) => wrapper.findAll('.form__actions .btn').map((b) => b.text());
+
+	it('puts Save to the right of Cancel so the go button is the last one reached', async () => {
+		const { wrapper } = await mountForm();
+
+		expect(labels(wrapper)).toEqual(['Cancel', 'Save']);
+	});
+
+	it('puts Delete first, which the brand rule pushes to the far left, away from Save', async () => {
+		editing();
+		const { wrapper } = await mountForm(fakeServer(), [task('1')]);
+
+		expect(labels(wrapper)).toEqual(['Delete', 'Cancel', 'Save']);
+	});
+});

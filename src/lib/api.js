@@ -26,8 +26,17 @@ export class ApiError extends Error {
 	}
 }
 
+/**
+ * Status 0 is the only status that means "the request never arrived".
+ *
+ * Matched on the status rather than on `instanceof ApiError`, because the class
+ * is the one part that does not survive being re-thrown across a layer, and the
+ * rest of the app already branches on `error?.status` alone. Getting this wrong
+ * is expensive in one direction only: a failure mistaken for a dropped
+ * connection is a real fault reported as weather, and disappears.
+ */
 export function isOffline(error) {
-	return error instanceof ApiError && error.status === 0;
+	return error?.status === 0;
 }
 
 async function parse(response) {

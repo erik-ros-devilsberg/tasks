@@ -143,51 +143,46 @@ the user's typing to a validation modal, and always show what was saved.
 
 **Hand-written CSS. No Tailwind. No scoped `<style>` blocks in SFCs.**
 
-Central, split by function under `public/css/`, with a single `main.css` importing in
-cascade order:
+The devilsberg-brand plugin is the stylesheet. Its `css/` and `fonts/` are copied verbatim
+into `public/css/` and `public/fonts/` — `tests/css.test.js` fails if any of the seven brand
+sheets differs from the plugin. **Never edit them here**; re-copy when the plugin changes.
 
 ```
-tokens.css → base.css → layout.css → components.css → utilities.css
+main.css  →  fonts → tokens → base → layout → components → utilities   (brand, read-only)
+app.css   →  everything this app adds or overrides                     (the only editable sheet)
 ```
+
+`index.html` links `main.css` then `app.css`. Read the plugin's `css/README.md` and
+`example.html` before styling anything.
 
 ### The rules that matter
 
-1. **All tokens live in `tokens.css`. No hardcoded hex anywhere else** — colours and
-   `--font-title` / `--font-body` included.
-2. **Reuse generic shared classes. Do not mint a bespoke class per component.** Every
-   card/panel surface is the one shared `.card`. No `.task-card`, no `.detail-panel`. Add a
-   **modifier** only for a real visual variant.
-3. **Prefer extending an existing rule over adding a new block.**
-4. When a pattern appears a **second** time, extract it to the global sheet immediately —
-   do not wait for the third.
-5. Component-specific CSS is minimal and only for genuinely unique layout.
+1. **No hex or rgba outside `tokens.css`** — the one exception is the `:root` token block at
+   the top of `app.css`, for colours the brand palette does not have.
+2. **Semantic tokens only** (`--bg`, `--fg`, `--border`, `--error`, `--action`), never palette
+   names (`--onyx`, `--hot-fuchsia`) — that is what keeps `.theme-light` a one-block override.
+3. **Reuse a brand class before writing anything.** Every surface is `.card`, every control is
+   `.btn`, every input is `.field__input`. No `.task-card`. Add a modifier only for a real
+   visual variant.
+4. **Every block in `app.css` is labelled `ADDITION` or `OVERRIDE`** and says why. An override
+   is a candidate to push back into the brand; an addition is a candidate brand component.
+5. When a pattern appears a **second** time, extract it to `app.css` immediately.
 
 ### Naming — BEM
 
-`.block`, `.block__element`, `.block--modifier`.
+`.block`, `.block__element`, `.block--modifier`; state classes `.is-*`.
 
-### Class inventory to reuse first
+### Colour semantics
 
-Carried over from `../contacts` — reach for these before writing anything new:
-
-**Layout/shell:** `.container` `.app-main` `.app-view` `.nav` `.nav__inner` `.nav__brand`
-`.nav__links` `.nav__version` `.toolbar` `.toolbar__actions` `.wordmark` `.skip-link`
-**Surfaces:** `.card` `.card--flush`
-**Lists:** `.list` `.list__header` `.list__row` `.list__primary` `.list__secondary`
-**Forms & actions:** `.form` `.form__actions` `.field` `.field__error` `.field--inline`
-`.btn` `.btn--primary` `.btn--ghost` `.btn--danger` `.btn--sm` `.modal` `.modal__dialog`
-`.modal__actions`
-**State:** `.error` `.notice` `.is-overdue` `.badge` `.badge--overdue` `.badge--pending`
-`.conn` `.conn--offline`
-**Utilities:** `.text-muted` `.text-meta` `.text-preline` `.visually-hidden` `.mt-2`
-`.stack`
+Focus is a white ring (`--focus`) — never red. `--error` is Hot Fuchsia, `--success` is Sea
+Green, `--action` → `--action-hover` is Blue Slate → Sea Green. Row state colours
+(`--row-overdue` dark red, `--row-today` amber, `--row-upcoming` green, `--row-undated`,
+`--row-completed`) are app tokens in `app.css`.
 
 ### Brand
 
-Devilsberg dark — Onyx canvas, Ghost White text. Tokens, typography scale, motion rules,
-accessibility floor and voice are specified in `../contacts/docs/conventions.md` §8; copy
-the token block verbatim rather than re-deriving it. Load the
-`devilsberg-brands:devilsberg-brand` skill when producing copy or design.
+Devilsberg dark — Onyx canvas, Ghost White text. Load the `devilsberg-brands:devilsberg-brand`
+skill when producing copy or design.
 
 Voice: direct, concise, first person. Say what happened, then stop.
 

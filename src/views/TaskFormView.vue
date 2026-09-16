@@ -111,18 +111,18 @@ async function destroy() {
 </script>
 
 <template>
-	<section class="app-view container">
+	<section class="container">
 		<h1>{{ editing ? 'Edit task' : 'New task' }}</h1>
 
 		<form class="form" @submit.prevent="submit">
 			<div class="field">
-				<label for="title">Title</label>
-				<input id="title" v-model="title" name="title" type="text" maxlength="255" />
+				<label class="field__label" for="title">Title</label>
+				<input class="field__input" id="title" v-model="title" name="title" type="text" maxlength="255" />
 			</div>
 
 			<div class="field">
-				<label for="notes">Notes</label>
-				<textarea id="notes" v-model="notes" name="notes"></textarea>
+				<label class="field__label" for="notes">Notes</label>
+				<textarea class="field__input" id="notes" v-model="notes" name="notes"></textarea>
 			</div>
 
 			<!--
@@ -131,8 +131,9 @@ async function destroy() {
 				— any whole number of minutes is still accepted.
 			-->
 			<div class="field">
-				<label for="duration">Duration</label>
+				<label class="field__label" for="duration">Duration</label>
 				<input
+					class="field__input"
 					id="duration"
 					v-model="duration"
 					name="duration"
@@ -150,19 +151,20 @@ async function destroy() {
 				is the answer this form gives, and datetime-local cannot express it.
 			-->
 			<div class="field">
-				<label for="due_date">Due</label>
-				<input id="due_date" v-model="dueDate" name="due_date" type="date" />
+				<label class="field__label" for="due_date">Due</label>
+				<input class="field__input" id="due_date" v-model="dueDate" name="due_date" type="date" />
 			</div>
 
 			<p v-if="error" class="error">{{ error }}</p>
 
+			<!--
+				Order is load-bearing: `.form__actions` is a right-aligned flex row with no
+				reversal, so the go button must come last in the markup to sit rightmost.
+				Delete stays first and the brand's `margin-right: auto` throws it to the far
+				left, out of misclick range of Save — and that keeps Cancel and Save in the
+				same place whether the form is creating or editing.
+			-->
 			<div class="form__actions">
-				<button class="btn btn--primary" type="submit" :disabled="busy || unloadable">
-					{{ busy ? 'Saving' : 'Save' }}
-				</button>
-
-				<button class="btn btn--ghost" type="button" @click="router.push('/')">Cancel</button>
-
 				<button
 					v-if="editing"
 					class="btn btn--danger"
@@ -171,6 +173,12 @@ async function destroy() {
 					@click="confirmingDelete = true"
 				>
 					Delete
+				</button>
+
+				<button class="btn btn--ghost" type="button" @click="router.push('/')">Cancel</button>
+
+				<button class="btn btn--primary" type="submit" :disabled="busy || unloadable">
+					{{ busy ? 'Saving' : 'Save' }}
 				</button>
 			</div>
 		</form>

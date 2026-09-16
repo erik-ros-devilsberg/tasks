@@ -305,39 +305,52 @@ describe('keeping the list current without being asked', () => {
 });
 
 describe('when the server cannot be reached', () => {
-	it('explains itself without blaming the user, and stops loading', async () => {
-		// A notice, not an error: the app is doing exactly what it was built to
-		// do. The user only needs to know why the list might be behind.
+	it('says nothing and stops loading — a dropped connection needs no message', async () => {
+		// Status 0 is the only status that means "did not arrive". The app is
+		// doing exactly what it was built to do, so it says nothing at all.
+		const wrapper = await mounted(
+			fakeRemote({ listAll: vi.fn().mockRejectedValue(failure(0)) }),
+		);
+
+		expect(wrapper.find('.error').exists()).toBe(false);
+		expect(wrapper.text()).not.toMatch(/offline|no connection/i);
+		expect(wrapper.text()).not.toMatch(/loading/i);
+	});
+
+	it('says nothing when the server answers with an error either', async () => {
+		// A 500 from the app, a 502 from a proxy in front of it, a 500 from the
+		// dev proxy because the backend is not running — to the user these are all
+		// the same thing, and none of them is a thing they can act on. The retry
+		// loop waits it out.
 		const wrapper = await mounted(
 			fakeRemote({ listAll: vi.fn().mockRejectedValue(failure(500)) }),
 		);
 
-		expect(wrapper.find('.notice').exists()).toBe(true);
 		expect(wrapper.find('.error').exists()).toBe(false);
-		expect(wrapper.text()).not.toMatch(/loading/i);
+		expect(wrapper.text()).not.toMatch(/server|error|offline|connection/i);
 	});
 
 	it('keeps showing the tasks saved on the device', async () => {
 		const listAll = vi
 			.fn()
 			.mockResolvedValueOnce([task('1', { title: 'Buy milk' })])
-			.mockRejectedValue(failure(500));
+			.mockRejectedValue(failure(0));
 		const wrapper = await mounted(fakeRemote({ listAll }));
 
 		document.dispatchEvent(new Event('visibilitychange'));
 		await flushPromises();
 
-		expect(wrapper.find('.notice').exists()).toBe(true);
 		expect(wrapper.text()).toContain('Buy milk');
 	});
 
 	it('does not claim the account is empty when no sync has ever got through', async () => {
 		const wrapper = await mounted(
-			fakeRemote({ listAll: vi.fn().mockRejectedValue(failure(500)) }),
+			fakeRemote({ listAll: vi.fn().mockRejectedValue(failure(0)) }),
 		);
 
-		// "No tasks yet" alongside "no connection" tells the user two
-		// contradictory things, one of which is a guess.
+		// Nothing has been heard from the server, so an empty cache is a guess.
+		// Telling someone their list is empty when it may not be is a lie they
+		// have no way to check.
 		expect(wrapper.text()).not.toMatch(/no tasks yet/i);
 	});
 

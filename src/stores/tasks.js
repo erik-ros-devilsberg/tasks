@@ -61,11 +61,18 @@ export const useTasksStore = defineStore('tasks', () => {
 	// list is a fact rather than a guess.
 	const loaded = ref(false);
 	const syncing = ref(false);
-	// Hard problems the user may need to act on: a change the server refused.
+	// Hard problems the user may need to act on: a change the server refused,
+	// or a server that answered with something other than the list. Losing a
+	// connection is not one of these — see `syncNow`.
 	const error = ref('');
-	// Not a problem — an explanation. Being offline is the app working.
-	const notice = ref('');
 	const unauthorized = ref(false);
+	/*
+	 * Whether the server has ever answered on this device. The device always
+	 * answers, so an empty cache is only a fact once we have heard from the
+	 * server — before that it is a guess, and "no tasks yet" would be a lie to
+	 * someone whose first ever launch happened to be offline.
+	 */
+	const synced = ref(false);
 	const pendingCount = ref(0);
 	const pendingIds = ref([]);
 
@@ -120,10 +127,12 @@ export const useTasksStore = defineStore('tasks', () => {
 	/**
 	 * Push local work first, then pull. The other order would refresh away an
 	 * edit that has not left the device yet.
+	 *
+	 * Returns whether it got through, so a caller can decide to try again. It
+	 * never throws and never reports a transport failure: see the catch.
 	 */
 	async function syncNow() {
 		syncing.value = true;
-		notice.value = '';
 
 		try {
 			const result = await store().flush();
@@ -143,10 +152,40 @@ export const useTasksStore = defineStore('tasks', () => {
 			if (refreshed === null) {
 				unauthorized.value = true;
 
-				return;
+				return false;
 			}
+
+			/*
+			 * Cleared here rather than on the way in: a sync runs on every save
+			 * and every return to the tab, and clearing up front would wipe the
+			 * "changes were dropped" message a second later, which is the one
+			 * message the user most needs to see.
+			 */
+			if (!result.rejected.length) {
+				error.value = '';
+			}
+
+			synced.value = true;
+
+			return true;
 		} catch {
-			notice.value = 'No connection. Showing the tasks saved on this device.';
+			/*
+			 * A sync that does not get through is never the user's problem.
+			 *
+			 * There is no useful distinction to draw here for them. The device may
+			 * be in a tunnel, the server may be restarting, a proxy may be
+			 * answering 502 on its behalf — and in development Vite's own proxy
+			 * answers 500 when the backend is not running. All of it means the
+			 * same thing: not now, try later. The work is on the device, the queue
+			 * is durable and ordered, and `useRetryingSync` keeps attempting until
+			 * it lands.
+			 *
+			 * The one failure worth reporting is a change the server actively
+			 * refused and dropped, which is not this path — that is `rejected`
+			 * above, and it is about losing the user's own work rather than about
+			 * the state of the network.
+			 */
+			return false;
 		} finally {
 			await readLocal();
 			loaded.value = true;
@@ -224,7 +263,7 @@ export const useTasksStore = defineStore('tasks', () => {
 		loaded.value = false;
 		loading.value = true;
 		error.value = '';
-		notice.value = '';
+		synced.value = false;
 		unauthorized.value = false;
 		await readPending();
 	}
@@ -235,7 +274,7 @@ export const useTasksStore = defineStore('tasks', () => {
 		loaded,
 		syncing,
 		error,
-		notice,
+		synced,
 		unauthorized,
 		pendingCount,
 		pendingIds,

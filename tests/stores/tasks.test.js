@@ -140,9 +140,10 @@ describe('syncNow', () => {
 		expect(tasks.tasks.map((t) => t.id).sort()).toEqual(['1', '2']);
 	});
 
-	it('says it is showing saved tasks when the server cannot be reached', async () => {
-		// Not an error: the app is working exactly as intended. The user only
-		// needs to know why the list might be behind.
+	it('says nothing at all when the server cannot be reached', async () => {
+		// Being offline is the app working as designed. The work is on the device
+		// and the queue drains when a connection returns, so there is nothing the
+		// user has to do and nothing worth interrupting them for.
 		const remote = fakeServer();
 		remote.listAll = failing(0);
 
@@ -150,8 +151,39 @@ describe('syncNow', () => {
 
 		await tasks.syncNow();
 
-		expect(tasks.notice).toContain('this device');
 		expect(tasks.error).toBe('');
+	});
+
+	it.each([0, 404, 500, 502, 503, 504])(
+		'says nothing when the sync fails with %i — the queue waits, the user is not told',
+		async (status) => {
+			// Whatever a failed sync means, it is not the user's problem to solve.
+			// The server may be down, the proxy may be answering for it, the phone
+			// may be in a tunnel. The work is on the device and the queue retries.
+			const remote = fakeServer();
+			remote.listAll = failing(status);
+
+			const { tasks } = store(remote);
+
+			await tasks.syncNow();
+
+			expect(tasks.error).toBe('');
+		},
+	);
+
+	it('reports that it did not get through, so the caller can retry', async () => {
+		const remote = fakeServer();
+		remote.listAll = failing(503);
+
+		const { tasks } = store(remote);
+
+		await expect(tasks.syncNow()).resolves.toBe(false);
+	});
+
+	it('reports success, so the caller can stop retrying', async () => {
+		const { tasks } = store(fakeServer());
+
+		await expect(tasks.syncNow()).resolves.toBe(true);
 	});
 
 	it('leaves the saved tasks on screen when a sync fails', async () => {
@@ -165,18 +197,20 @@ describe('syncNow', () => {
 		expect(tasks.tasks.map((t) => t.id)).toEqual(['1']);
 	});
 
-	it('clears the notice once a sync gets through', async () => {
-		const remote = fakeServer();
-		const { listAll } = remote;
-		remote.listAll = failing(0);
+	it('clears a rejected-change report once a later sync gets through', async () => {
+		const remote = fakeServer([task('1')]);
+		remote.update = failing(422);
 
 		const { tasks } = store(remote);
 		await tasks.syncNow();
-
-		remote.listAll = listAll;
+		await tasks.update('1', { title: 'Renamed' });
 		await tasks.syncNow();
 
-		expect(tasks.notice).toBe('');
+		expect(tasks.error).toContain('could not be saved');
+
+		await tasks.syncNow();
+
+		expect(tasks.error).toBe('');
 	});
 
 	it('raises unauthorized on a 401 rather than reporting a connection problem', async () => {
@@ -188,7 +222,7 @@ describe('syncNow', () => {
 		await tasks.syncNow();
 
 		expect(tasks.unauthorized).toBe(true);
-		expect(tasks.notice).toBe('');
+		expect(tasks.error).toBe('');
 	});
 
 	it('reports a change the server refused instead of dropping it silently', async () => {
@@ -485,5 +519,65 @@ describe('what the list renders', () => {
 		await nextTick();
 
 		expect(localStorage.getItem(COMPLETED_SHOWN_KEY)).toBe('true');
+	});
+});
+
+describe('a server that was down and came back', () => {
+	it('keeps a task created while it was down, without needing a reload', async () => {
+		// The exact sequence from the field: one existing task edited and one new
+		// task written while the server was down, then the server returns.
+		const remote = fakeServer([task('1', { title: 'Existing' })]);
+		const { tasks } = store(remote);
+		await tasks.syncNow();
+
+		const { listAll, create, update } = remote;
+		remote.listAll = failing(500);
+		remote.create = failing(500);
+		remote.update = failing(500);
+
+		await tasks.create({ title: 'Written while down', notes: null, due_at: null, duration: null });
+		await tasks.update('1', { title: 'Edited while down', notes: null, due_at: null, duration: null });
+		await tasks.syncNow();
+
+		expect(tasks.tasks.map((t) => t.title).sort()).toEqual(['Edited while down', 'Written while down']);
+
+		remote.listAll = listAll;
+		remote.create = create;
+		remote.update = update;
+		await tasks.syncNow();
+
+		expect(tasks.tasks.map((t) => t.title).sort()).toEqual(['Edited while down', 'Written while down']);
+	});
+
+	it('survives a list answer that was in flight while the new task synced', async () => {
+		// The one that actually bit: a slow list request issued before the task
+		// existed, landing after it had synced. Reconciliation then read the task
+		// as one the server had deleted, and dropped it.
+		const remote = fakeServer([task('1', { title: 'Existing' })]);
+		const { tasks } = store(remote);
+		await tasks.syncNow();
+
+		let release;
+		const hang = new Promise((resolve) => {
+			release = resolve;
+		});
+		const realListAll = remote.listAll;
+		remote.listAll = vi.fn(async () => {
+			remote.listAll = realListAll;
+			const answer = [...remote.records.values()];
+			await hang;
+
+			return answer;
+		});
+
+		const late = tasks.syncNow();
+
+		await tasks.create({ title: 'New one', notes: null, due_at: null, duration: null });
+		await tasks.syncNow();
+
+		release();
+		await late;
+
+		expect(tasks.tasks.map((t) => t.title).sort()).toEqual(['Existing', 'New one']);
 	});
 });

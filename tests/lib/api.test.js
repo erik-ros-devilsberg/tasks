@@ -133,6 +133,16 @@ describe('failures', () => {
 		expect(isOffline(failure)).toBe(true);
 	});
 
+	it('reads the status alone, so an error re-thrown across a layer is still offline', () => {
+		// The class does not survive every hop; the status does. Requiring
+		// `instanceof` here is how a dropped connection got misread as a server
+		// fault — and how every server fault got misreported as being offline.
+		expect(isOffline(Object.assign(new Error('gone'), { status: 0 }))).toBe(true);
+		expect(isOffline(Object.assign(new Error('nope'), { status: 500 }))).toBe(false);
+		expect(isOffline(new Error('no status at all'))).toBe(false);
+		expect(isOffline(undefined)).toBe(false);
+	});
+
 	it('calls onUnauthorized once on 401, so the session is cleared in one place', async () => {
 		fetchMock.mockResolvedValue(response(401, { message: 'Unauthenticated.' }));
 		const onUnauthorized = vi.fn();

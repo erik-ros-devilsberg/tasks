@@ -306,6 +306,51 @@ describe('refreshing', () => {
 
 		await expect(store().refresh()).rejects.toThrow('No connection');
 	});
+
+	it('does not delete a record that appeared after the list was asked for', async () => {
+		/*
+		 * The field report: a task written while the server was down vanished the
+		 * moment the server came back, and returned on the next launch.
+		 *
+		 * A list request issued to a server that is down resolves late. If a
+		 * second sync drains the queue while it is still in flight, the new record
+		 * is in storage under its server id and no longer queued by the time the
+		 * stale answer lands — so it looked like a record the server had deleted.
+		 */
+		const offline = store();
+		let release;
+		const hang = new Promise((resolve) => {
+			release = resolve;
+		});
+
+		remote.listAll = vi.fn(async () => {
+			await hang;
+
+			// The answer to a question asked before the record existed.
+			return [task('1')];
+		});
+
+		const late = offline.refresh();
+
+		await kv.set('server-9', task('server-9', { title: 'Written while it was down' }));
+		release();
+		await late;
+
+		expect((await kv.all()).map((record) => record.id).sort()).toEqual(['1', 'server-9']);
+	});
+
+	it('still removes a record the server really did delete', async () => {
+		// The guard above must not turn reconciliation into append-only: a record
+		// that was there when we asked, and is absent from the answer, is gone.
+		const offline = store();
+		await kv.set('1', task('1'));
+		await kv.set('2', task('2'));
+		remote.listAll = vi.fn(async () => [task('1')]);
+
+		await offline.refresh();
+
+		expect((await kv.all()).map((record) => record.id)).toEqual(['1']);
+	});
 });
 
 describe('clearing', () => {

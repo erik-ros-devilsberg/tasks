@@ -11,7 +11,7 @@
  * is a route that fails offline.
  */
 
-const CACHE = 'coevta-tasks-v1';
+const CACHE = 'coevta-tasks-v2';
 
 const SHELL = [
 	'/',
@@ -24,15 +24,22 @@ const SHELL = [
 	'/icon-maskable-512.png',
 	'/apple-touch-icon.png',
 	'/css/main.css',
+	'/css/fonts.css',
 	'/css/tokens.css',
 	'/css/base.css',
 	'/css/layout.css',
 	'/css/components.css',
 	'/css/utilities.css',
-	// The wordmark face. Without it the brand type falls back mid-session the
-	// first time the user opens the app without a connection.
+	// Linked separately from main.css, after it — everything this app adds to or
+	// overrides in the brand. Missing offline, the app renders as raw brand.
+	'/css/app.css',
+	// The faces fonts.css declares. Without them the brand type falls back
+	// mid-session the first time the user opens the app without a connection.
+	'/fonts/LEMONMILK-Light.otf',
 	'/fonts/LEMONMILK-Medium.otf',
 	'/fonts/LEMONMILK-Bold.otf',
+	'/fonts/OpenSans-VariableFont_wdth,wght.ttf',
+	'/fonts/Streetag-Regular.ttf',
 	'/assets/index.js',
 ];
 

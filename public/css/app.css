@@ -1,0 +1,237 @@
+/* ==========================================================================
+   Tasks — the one application sheet, loaded after the brand's main.css.
+
+   Everything the brand does not provide, or provides differently, lives
+   here and nowhere else. Each block says which of the two it is: an
+   ADDITION the brand has no class for, or an OVERRIDE of a brand rule. An
+   override is a candidate for going back into the brand; an addition is a
+   candidate for a new brand component. Neither is edited into the brand
+   files themselves — those are copied byte for byte from the plugin.
+   ========================================================================== */
+
+/* ---------- Tokens (ADDITION) ----------
+   Row state colours. The brand palette has no amber and no dark red, and
+   its dimmed ink (--fg-soft) is too loud for a struck-through row, so these
+   are app tokens. Every fill is paired with the ink that stays legible on it. */
+
+:root {
+	--gray-faint: #8b98a1;
+	--row-overdue: #8f0f26;
+	--row-overdue-ink: var(--ghost-white);
+	--row-today: #b35c00;
+	--row-today-ink: var(--ghost-white);
+	--row-upcoming: #0bbf5c;
+	--row-upcoming-ink: var(--onyx);
+	--row-undated: rgba(11, 191, 92, 0.42);
+	--row-undated-ink: var(--ghost-white);
+	--row-completed: var(--bg-muted);
+	--row-completed-ink: var(--gray-faint);
+	--fab-size: 3.5rem;
+	--z-menu: 50;
+}
+
+/* ---------- Shell (OVERRIDE) ----------
+   The brand's .app-main carries the page gutter itself; here each view is a
+   .container that carries its own, so the gutter is dropped from the shell
+   to avoid doubling it. The bottom padding leaves room for the floating add
+   button, so it never sits over the last task. */
+
+.app-main {
+	padding-inline: 0;
+	padding-bottom: calc(var(--fab-size) + var(--space-6) + env(safe-area-inset-bottom, 0px));
+}
+
+.app-main:focus {
+	outline: none;
+}
+
+/* ---------- Footer (ADDITION) ---------- */
+
+.footer {
+	padding-bottom: calc(var(--space-6) + env(safe-area-inset-bottom, 0px));
+}
+
+.footer__inner {
+	display: flex;
+	justify-content: flex-end;
+	font-size: var(--text-xs);
+	letter-spacing: var(--tracking-title);
+}
+
+/* ---------- List (OVERRIDE) ----------
+   Pulled out of the container's gutter so a row spans the whole width it is
+   given — the full screen on a phone, the container on a desktop. A row's
+   background is what states its status, and leaving the page colour down
+   both sides would turn that into a stripe instead of a row. */
+
+.list {
+	margin: 0 calc(var(--container-pad) * -1);
+	border-top: 0;
+}
+
+.list__row {
+	gap: var(--space-3);
+	padding: var(--space-3) var(--container-pad);
+}
+
+/* Also the row's own control — clicking the name opens the task. Styled to
+   disappear as a button so the row still reads as a line of text. */
+button.list__primary {
+	flex: 1 1 auto;
+	min-width: 0;
+	padding: 0;
+	background: none;
+	border: 0;
+	color: inherit;
+	font-weight: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+/* ---------- List row states (ADDITION) ----------
+   State by colour, because the row carries no badge to say it. */
+
+.list__row--overdue {
+	background-color: var(--row-overdue);
+	color: var(--row-overdue-ink);
+}
+
+.list__row--today {
+	background-color: var(--row-today);
+	color: var(--row-today-ink);
+}
+
+.list__row--upcoming {
+	background-color: var(--row-upcoming);
+	color: var(--row-upcoming-ink);
+}
+
+.list__row--undated {
+	background-color: var(--row-undated);
+	color: var(--row-undated-ink);
+}
+
+.list__row--completed {
+	background-color: var(--row-completed);
+	color: var(--row-completed-ink);
+}
+
+/* Struck through and dimmed, so a finished task is something the eye skips
+   on the way past rather than a line it has to read to dismiss. The brand
+   has .is-done for this; the app derives the state name from the record. */
+.list__row--completed .list__primary {
+	text-decoration: line-through;
+}
+
+/* Rows are <li>, so the brand's hover (a./button.list__row only) never
+   fires; a plain tint would wash the state colour out anyway. Lift it. */
+.list__row[class*='list__row--']:hover {
+	filter: brightness(1.12);
+}
+
+/* ---------- Overdue mark (ADDITION) ----------
+   Overdue is never signalled by colour alone — the row also carries a text
+   label. This just makes it findable at a glance for those who can see it. */
+
+.is-overdue {
+	color: var(--error);
+}
+
+/* ---------- Floating add button (ADDITION) ----------
+   The one control worth putting under a thumb. Fixed to the viewport, clear
+   of whatever the device carves out at the bottom. */
+
+.btn--fab {
+	position: fixed;
+	/* Tracks the container's right edge on a wide screen instead of drifting
+	   off to the far corner, and falls back to the plain gutter on anything
+	   narrower than the container. */
+	right: max(var(--container-pad), calc(50vw - var(--container-max) / 2 + var(--container-pad)));
+	bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
+	z-index: var(--z-nav);
+	width: var(--fab-size);
+	height: var(--fab-size);
+	border-radius: var(--radius-round);
+	box-shadow: var(--shadow-sm);
+}
+
+/* .btn--icon paints itself ghost-grey; the FAB is a primary action. */
+.btn--fab.btn--primary {
+	background-color: var(--action);
+	border-color: var(--action);
+	color: var(--ghost-white);
+}
+
+.btn--fab.btn--primary:hover {
+	background-color: var(--action-hover);
+	border-color: var(--action-hover);
+}
+
+.btn--fab svg {
+	width: 1.5rem;
+	height: 1.5rem;
+}
+
+/* ---------- Menu (ADDITION) ----------
+   The nav's one button opens this: a dropdown under the bar, backdrop
+   closes it. The brand has no menu component. */
+
+.menu {
+	position: fixed;
+	inset: 0;
+	z-index: var(--z-menu);
+	display: flex;
+	justify-content: flex-end;
+	align-items: flex-start;
+	padding: var(--nav-height) var(--space-4) var(--space-4);
+	background-color: var(--overlay);
+}
+
+.menu__panel {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	max-width: 260px;
+	padding: var(--space-2);
+}
+
+.menu__item {
+	padding: var(--space-3) var(--space-4);
+	background: none;
+	border: 0;
+	border-radius: var(--radius-sm);
+	color: var(--fg);
+	font-family: var(--font-title);
+	font-size: 0.9rem;
+	font-weight: 500;
+	letter-spacing: var(--tracking-label);
+	text-align: left;
+	text-transform: uppercase;
+	transition: background-color var(--transition);
+}
+
+.menu__item:hover {
+	background-color: var(--bg-hover);
+}
+
+/* ---------- Confirm dialog actions (OVERRIDE) ----------
+   The brand throws `.btn--danger` to the far left of an action row, which is right
+   when danger is a third, incidental button next to a separate go button — the task
+   form. In the confirm dialog the danger button *is* the go button, so the brand rule
+   lands the destructive action on the left and Cancel on the right, backwards from
+   every other action row in the app. Scoped to `:last-child` so a dialog that ever
+   does carry a tertiary danger button still gets the brand behaviour.
+   Candidate to push back into the brand as the general rule. */
+.modal__actions .btn--danger:last-child {
+	margin-right: 0;
+}
+
+/* ---------- Pending badge (ADDITION) ----------
+   The brand has .badge--accent/success/error/info, none of which fit. Not a
+   warning: the change is saved — this says only that the server has not been
+   told yet, which is why the same task may look different elsewhere for now.
+   Amber rather than fuchsia, because nothing is wrong. */
+.badge--pending {
+	border-color: var(--row-today);
+	color: var(--row-today);
+}

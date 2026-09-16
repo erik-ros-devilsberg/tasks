@@ -30,7 +30,7 @@ async function submit() {
 </script>
 
 <template>
-	<section class="app-view container">
+	<section class="container">
 		<h1>Sign in</h1>
 
 		<p v-if="session.expired" class="notice">
@@ -39,13 +39,14 @@ async function submit() {
 
 		<form class="form" @submit.prevent="submit">
 			<div class="field">
-				<label for="email">Email</label>
-				<input id="email" v-model="email" type="email" autocomplete="username" required />
+				<label class="field__label" for="email">Email</label>
+				<input class="field__input" id="email" v-model="email" type="email" autocomplete="username" required />
 			</div>
 
 			<div class="field">
-				<label for="password">Password</label>
+				<label class="field__label" for="password">Password</label>
 				<input
+					class="field__input"
 					id="password"
 					v-model="password"
 					type="password"

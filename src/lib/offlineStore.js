@@ -153,6 +153,23 @@ export function createOfflineStore({
 	async function refresh() {
 		let records;
 
+		/*
+		 * Snapshot taken before the request goes out, because the answer can only
+		 * speak for the moment it was asked.
+		 *
+		 * A sync that overlaps this one can drain a create while the list request
+		 * is still in flight: by the time the answer lands, the new record is in
+		 * storage under its server id and is no longer queued, so the two tests
+		 * below would both pass and the reconciliation would delete a task the
+		 * user had just written. It came back on the next launch — the server had
+		 * it all along — which is exactly what makes it look like a rendering
+		 * fault rather than a deletion.
+		 *
+		 * Anything that appeared after the request was issued is therefore newer
+		 * than the answer and is not the answer's to judge.
+		 */
+		const asked = new Set(await kv.keys());
+
 		try {
 			records = await remote.listAll();
 		} catch (error) {
@@ -180,7 +197,7 @@ export function createOfflineStore({
 		}
 
 		for (const id of await kv.keys()) {
-			if (!seen.has(id) && !pending.has(id)) {
+			if (!seen.has(id) && !pending.has(id) && asked.has(id)) {
 				await kv.del(id);
 			}
 		}

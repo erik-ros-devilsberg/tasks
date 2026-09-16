@@ -160,14 +160,20 @@ never imported — that seam is what lets tests hand it a fake and never touch I
 `useRemote()` enters the same seam one layer lower, wrapping a fake remote in the real
 durable layer over throwaway memory.
 
-State: `tasks`, `loading`, `loaded`, `syncing`, `error`, `notice`, `unauthorized`,
+State: `tasks`, `loading`, `loaded`, `synced`, `syncing`, `error`, `unauthorized`,
 `pendingCount`, `pendingIds`, `now`. Derived: `open`, `completed`, `visible`, `isPending`.
 
 - `load()` reads the device. `syncNow()` **pushes before it pulls** — the other order would
   refresh away an edit that has not left the device yet.
-- **`error` and `notice` are different things.** An error is a change the server refused and
-  dropped, which the user made and deserves to hear about. A notice is "no connection" — the
-  app working as designed, in the same voice as everything else.
+- **A dropped connection says nothing at all.** `error` is for a change the server refused
+  and dropped, or a server that answered with something other than the list. Losing the
+  connection is neither: the work is on the device, the queue is durable, and the next sync
+  drains it, so there is nothing for the user to do and nothing worth interrupting them for.
+- **Only `status === 0` is offline** (`isOffline` in `lib/api.js`, matched on the status, not
+  on `instanceof`). Everything else is a server that answered.
+- **`synced` is whether the server has ever answered on this device.** The device always
+  answers, so an empty cache is only a fact once we have heard from the server; before that
+  "no tasks yet" is a guess the user cannot check.
 - `loading` starts **true** — starting false flashes "no tasks yet" for a frame.
 - A `401` raises `unauthorized` rather than throwing. `App.vue` watches it, so it is handled
   once for every view rather than per view: any screen can be showing when a background sync
@@ -324,8 +330,9 @@ where their data comes from.
 contacts app is offline-first. This one is not, because nothing asked for it." The seam was
 built anyway, and that is the only reason this landed as an addition rather than a rewrite.
 
-**`useOnline`, `.conn*` and `.badge--pending` are carried over after all.** They signal sync
-state, which this client now has.
+**`.badge--pending` is carried over after all.** It signals sync state, which this client now
+has. `useOnline` and `.conn*` were carried over too and have since been removed — see the
+2026-09-16 entry below.
 
 **Completion is its own outbox operation, not an update.** Two reasons:
 `POST /tasks/{id}/complete` takes no body and lets the server stamp the authoritative time,
@@ -343,12 +350,90 @@ so nothing breaks in the meantime.
 **No auto-push after a write.** See `stores/tasks.js` above — it would defeat the outbox's
 coalescing.
 
-**Fonts from `fonts.bunny.net` are not precached**, being cross-origin. Offline, the body
-face falls back to the system sans; the wordmark face is vendored and precached, so the brand
-type survives.
+**Every font is vendored and precached.** This was not always so — the body face used to be
+fetched from `fonts.bunny.net` and could not be precached, being cross-origin, so offline it
+fell back to the system sans. Adopting the brand plugin brought all five faces into
+`public/fonts/`, and `sw.js` lists each one, so the type is now identical online and off.
 
 **Token in `localStorage` is readable by any XSS on the origin.** Accepted: it matches the
 sibling app, and the server's token endpoint offers no httpOnly-cookie alternative.
+
+**The brand stylesheets are copied, never edited (2026-09-16).** `public/css/` holds the
+devilsberg-brand plugin's seven sheets byte for byte, plus `public/fonts/`, and a test fails the
+moment one drifts. Everything this app needs on top — row state colours, the floating add
+button, the nav menu, the full-bleed list, the pending badge and the connection strip — is in
+the one extra sheet `public/css/app.css`, linked from `index.html` after `main.css`. Each block
+in it is labelled ADDITION (the brand has no class for it) or OVERRIDE (the brand's rule was
+wrong for this app), so a later pass can decide what to push back into the brand. Markup
+adopted the brand's names where they existed: `.nav--sticky`, `.field__label` /
+`.field__input`, `.modal.is-open`, `ul.list`.
+
+Two things fell out of the adoption. The app's own `:focus-visible` rule was **deleted rather
+than ported** — the brand already draws the same Ghost White ring from `--focus`, and keeping a
+second copy would have meant maintaining the same decision twice. And `sw.js` gained
+`fonts.css`, `app.css` and the five font files, with `CACHE` bumped to `v2`: the shell list is
+hand-maintained, so a sheet added without a line there is a sheet that vanishes offline.
+
+**A list answer only speaks for the moment it was asked (2026-09-16).** `refresh()` takes a
+snapshot of the cache's keys *before* issuing `listAll()`, and will only delete a record that
+was already there when the question was asked. Without that, a task created while the server
+was down disappeared the moment the server came back.
+
+The mechanism: `sync.flush()` is guarded by a single in-flight promise, but `refresh()` is
+not, so two syncs can overlap. A list request sent to a server that is down resolves late. If
+a second sync drains the queue while it is still in flight, the new record is in storage under
+its server id and no longer queued by the time the stale answer lands — so both of
+reconciliation's tests pass and it deletes a task the user had just written. It came back on
+the next launch, because the server had it all along, which is what made it look like a
+rendering fault rather than a deletion. Reconciliation is destructive by design; it has to be
+told which records it is entitled to judge.
+
+**A sync that does not get through is never reported (2026-09-16).** `syncNow()` returns
+whether it landed and says nothing when it did not. There is no useful distinction to draw for
+the user between a phone in a tunnel, a server restarting, a proxy answering `502` on its
+behalf, and — in development — Vite's own proxy answering `500` because `composer dev` is not
+running. All of it means the same thing: not now.
+
+Keying the message on `status === 0` was wrong for the same reason. Status 0 only happens when
+the *origin* is unreachable; any deployment with a proxy in front turns a dead backend into a
+gateway status, so the one case meant to stay quiet was the case that rarely produces that
+status.
+
+`composables/useRetryingSync.js` is what makes this safe to be silent about: it syncs on mount
+and keeps retrying on a backoff — 5s, 15s, 60s, then every 5 minutes — until one lands, resets
+on success, pauses while the tab is hidden and resumes when it returns. It never starts a sync
+on becoming visible; that is `useRefreshOnReturn`'s event, and it already dedupes the
+visibilitychange/focus pair a single return fires. This is not the poll that composable
+deliberately avoids: it runs only while a sync is known to be failing.
+
+The one failure still worth a message is a change the server **refused and dropped** (`422`) —
+that is about losing the user's own work, not about the state of the network.
+
+**Being offline is not something the user is told about (2026-09-16).** The app used to carry
+a strip above `<main>` — `useOnline` for "Offline…", `pendingCount` for "1 change waiting to
+sync" — and a notice on the list saying "No connection. Showing the tasks saved on this
+device." All of it is gone. Two faults, one cause:
+
+- **It was wrong.** `syncNow` caught *every* failure and reported it as a lost connection. A
+  `404` from an API base that was not where the build pointed it, a `5xx`, an unparseable
+  body — all of them told the user their device was offline. On a phone with a working
+  connection that message never went away, and it hid the real cause behind a plausible lie.
+  Now only `status === 0` is silent; anything else is a server that answered, and says so.
+- **It flickered.** The strip was inserted into the flow above `<main>`, so every save pushed
+  the page down and pulled it back a moment later — a layout shift on the most ordinary
+  action in the app.
+
+What replaces it is nothing. The per-row `.badge--pending` already says which tasks are
+waiting, inside the list where it shifts nothing, and the queue drains on its own. `synced`
+was added so the empty state can still tell a fact from a guess. `isOffline` now matches on
+`error?.status` rather than `instanceof ApiError`: the class is the part that does not survive
+being re-thrown across a layer, and the rest of the app already branches on the status alone.
+
+**This was applied to `local` by hand, not merged (2026-09-16).** The same work exists on
+`main` as commit `7f01d90`, made against a stale clone that never had the offline-first or
+duration work. Rather than merge two branches that had diverged by ~4,000 lines, the brand
+adoption was redone on top of `local`, which is the trunk. `main` is an artefact of
+`origin/HEAD` pointing at it during the clone, and should be retired.
 
 ## Sprints
 

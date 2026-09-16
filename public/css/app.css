@@ -213,3 +213,15 @@ button.list__primary {
 .menu__item:hover {
 	background-color: var(--bg-hover);
 }
+
+/* ---------- Confirm dialog actions (OVERRIDE) ----------
+   The brand throws `.btn--danger` to the far left of an action row, which is right
+   when danger is a third, incidental button next to a separate go button — the task
+   form. In the confirm dialog the danger button *is* the go button, so the brand rule
+   lands the destructive action on the left and Cancel on the right, backwards from
+   every other action row in the app. Scoped to `:last-child` so a dialog that ever
+   does carry a tertiary danger button still gets the brand behaviour.
+   Candidate to push back into the brand as the general rule. */
+.modal__actions .btn--danger:last-child {
+	margin-right: 0;
+}

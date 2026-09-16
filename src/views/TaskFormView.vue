@@ -165,13 +165,14 @@ async function destroy() {
 
 			<p v-if="error" class="error">{{ error }}</p>
 
+			<!--
+				Order is load-bearing: `.form__actions` is a right-aligned flex row with no
+				reversal, so the go button must come last in the markup to sit rightmost.
+				Delete stays first and the brand's `margin-right: auto` throws it to the far
+				left, out of misclick range of Save — and that keeps Cancel and Save in the
+				same place whether the form is creating or editing.
+			-->
 			<div class="form__actions">
-				<button class="btn btn--primary" type="submit" :disabled="busy || unloadable">
-					{{ busy ? 'Saving' : 'Save' }}
-				</button>
-
-				<button class="btn btn--ghost" type="button" @click="router.push('/')">Cancel</button>
-
 				<button
 					v-if="editing"
 					class="btn btn--danger"
@@ -180,6 +181,12 @@ async function destroy() {
 					@click="confirmingDelete = true"
 				>
 					Delete
+				</button>
+
+				<button class="btn btn--ghost" type="button" @click="router.push('/')">Cancel</button>
+
+				<button class="btn btn--primary" type="submit" :disabled="busy || unloadable">
+					{{ busy ? 'Saving' : 'Save' }}
 				</button>
 			</div>
 		</form>

@@ -193,6 +193,18 @@ describe('the add button', () => {
 	});
 });
 
+describe('the confirm dialog’s buttons', () => {
+	it('does not throw a danger button left when it is the dialog’s go button', () => {
+		// The brand pushes `.btn--danger` to the far left because it assumes danger is a
+		// third, incidental action sitting beside a separate go button — true on the task
+		// form, false in this dialog, where Delete *is* the go button. Unoverridden it puts
+		// the destructive button on the left and Cancel on the right: backwards.
+		expect(read('app.css')).toMatch(
+			/\.modal__actions .btn--danger:last-child\s*\{[^}]*margin-right:\s*0/,
+		);
+	});
+});
+
 describe('accessibility floor', () => {
 	it('gives focus a visible ring rather than a background tint alone', () => {
 		expect(read('base.css')).toMatch(/:focus-visible\s*\{[^}]*outline:/);

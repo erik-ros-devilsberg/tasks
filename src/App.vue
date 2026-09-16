@@ -19,6 +19,10 @@ const showUpdate = () => {
 	updateReady.value = true;
 };
 
+// Templates resolve bare names against the component, not window — a literal
+// `location.reload()` in the template is `undefined.reload()` at runtime.
+const reload = () => window.location.reload();
+
 onMounted(() => {
 	window.addEventListener('app-update-ready', showUpdate);
 });
@@ -107,7 +111,7 @@ async function signOut() {
 	<div v-if="updateReady" class="container mt-2">
 		<p class="notice">
 			A new version is ready.
-			<button class="btn btn--sm" type="button" data-action="reload" @click="location.reload()">
+			<button class="btn btn--sm" type="button" data-action="reload" @click="reload">
 				Reload
 			</button>
 		</p>

@@ -252,6 +252,19 @@ describe('a new version', () => {
 
 		expect(wrapper.find('[data-action="reload"]').exists()).toBe(true);
 	});
+
+	it('reloads the page when the user takes the offer', async () => {
+		const reload = vi.fn();
+		vi.stubGlobal('location', { reload });
+		const wrapper = mountApp();
+		window.dispatchEvent(new CustomEvent('app-update-ready'));
+		await wrapper.vm.$nextTick();
+
+		await wrapper.find('[data-action="reload"]').trigger('click');
+
+		expect(reload).toHaveBeenCalledOnce();
+		vi.unstubAllGlobals();
+	});
 });
 
 describe('the completed-tasks toggle', () => {

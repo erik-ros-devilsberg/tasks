@@ -516,3 +516,17 @@ name a build must never contain. Every build is therefore a new worker, and ever
 updates installed phones without anyone remembering a step. `stampCache()` is the pure part
 and is what the tests cover; it throws rather than no-ops when the line is missing, because a
 silent miss would ship exactly the stale cache this exists to prevent.
+
+## 2026-09-16 — list and navigation redesign (story 11, recorded after the fact)
+
+Shipped in `ae8f3d7` ("styling and some offline fixes") alongside the brand-stylesheet
+adoption, without a shaped sprint. Moved to `done/` on 2026-09-16 after checking the code
+against every criterion. The header keeps one wordmark and a hamburger; Refresh, the
+Completed toggle and Sign out live in `NavMenu.vue`, and the version sits in the footer. The
+list is one ordered list with no group headings; it reloads on mount, focus and visibility,
+and never polls. A row is a checkbox, the name and a trash control, and its state is carried
+by background colour plus a screen-reader-only word — no due-date text, no badges.
+
+One deliberate departure from the story text: the row colours are tokens in `app.css`'s
+`:root` block, not `tokens.css`. The brand sheets are copied byte for byte and a test fails
+if they drift, so an app-only colour has nowhere else to live.

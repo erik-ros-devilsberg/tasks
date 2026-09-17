@@ -53,7 +53,7 @@
 
 .footer__inner {
 	display: flex;
-	justify-content: flex-end;
+	justify-content: center;
 	font-size: var(--text-xs);
 	letter-spacing: var(--tracking-title);
 }

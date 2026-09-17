@@ -10,4 +10,4 @@ Maintained by the agile plugin. One row per sprint — updated by `/agile:shape`
 | Duration, and an App That Works Offline | duration-and-offline-install | done | Optional duration in minutes; offline-first storage, sync queue and Android install. |
 | Row Styling and Delete Mode | row-styling-and-delete-mode | done | Roomier rows, custom tick, borderless icon buttons; multi-select delete mode replaces per-row trash. |
 | Task Order — Field, Sort and Reorder Logic | task-order-field-sort-and-reorder | done | The order field, the day-then-order sort key, pure reorder logic, offline writes. |
-| Task Order — Drag to Reorder | task-order-drag-to-reorder | planned | A drag handle on open rows; mouse and touch reorder with a drop indicator. |
+| Task Order — Drag to Reorder | task-order-drag-to-reorder | done | A drag handle on open rows; mouse and touch reorder with a drop indicator. |

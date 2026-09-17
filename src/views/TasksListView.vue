@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useTasksStore } from '@/stores/tasks';
 import { useRefreshOnReturn } from '@/composables/useRefreshOnReturn';
 import { useRetryingSync } from '@/composables/useRetryingSync';
+import { useDragReorder } from '@/composables/useDragReorder';
 import { isOpen, stateOf } from '@/lib/taskSort';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 
@@ -27,6 +28,39 @@ watch(deleteMode, () => {
 });
 
 const selectedCount = computed(() => selected.value.size);
+
+/*
+ * Each row's element, by task id, so a drag can measure the rows it is moving
+ * among. The map, not a `v-for` ref array: a ref array follows DOM order, and
+ * what a drop needs is the rows in the *store's* open order, completed rows
+ * left out — `tasks.open` is that list, and it is the index space the store
+ * measures the drop in.
+ */
+const rowEls = new Map();
+
+function setRowEl(id, el) {
+	if (el) {
+		rowEls.set(id, el);
+	} else {
+		rowEls.delete(id);
+	}
+}
+
+const drag = useDragReorder({
+	rows: () => tasks.open.map((task) => ({ id: task.id, el: rowEls.get(task.id) })).filter((row) => row.el),
+	measure: (el) => {
+		const { top, bottom } = el.getBoundingClientRect();
+
+		return { top, bottom };
+	},
+	onDrop: (id, index) => tasks.reorder(id, index),
+});
+
+const dragClasses = (task) => ({
+	'is-dragging': drag.draggingId === task.id,
+	'is-drop-before': drag.target?.beforeId === task.id,
+	'is-drop-after': drag.target?.afterId === task.id,
+});
 
 /*
  * The row's state is signalled by its background colour, and colour is never
@@ -153,8 +187,13 @@ async function destroySelected() {
 			<li
 				v-for="task in tasks.visible"
 				:key="task.id"
+				:ref="(el) => setRowEl(task.id, el)"
 				class="list__row"
-				:class="[`list__row--${stateOf(task, tasks.now)}`, { 'is-selected': selected.has(task.id) }]"
+				:class="[
+					`list__row--${stateOf(task, tasks.now)}`,
+					{ 'is-selected': selected.has(task.id) },
+					dragClasses(task),
+				]"
 				:aria-selected="deleteMode ? String(selected.has(task.id)) : undefined"
 				@click="select(task)"
 			>
@@ -196,6 +235,32 @@ async function destroySelected() {
 				<span v-if="tasks.isPending(task.id)" class="badge badge--pending" data-state="pending">
 					Not synced
 				</span>
+
+				<!--
+					The one part of the row that starts a drag; the name and the
+					tick keep their jobs. Open rows only — a completed task has no
+					position — and never in delete mode, where a press means select.
+					Its click is stopped so the row does not take it for a select
+					if the mode flips mid-press. Keyboard reordering is a later story.
+				-->
+				<button
+					v-if="isOpen(task) && !deleteMode"
+					class="list__handle"
+					type="button"
+					data-action="reorder"
+					:aria-label="`Reorder ${task.title}`"
+					@pointerdown="drag.start($event, task.id)"
+					@click.stop
+				>
+					<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+						<circle cx="9" cy="6" r="1.6" />
+						<circle cx="15" cy="6" r="1.6" />
+						<circle cx="9" cy="12" r="1.6" />
+						<circle cx="15" cy="12" r="1.6" />
+						<circle cx="9" cy="18" r="1.6" />
+						<circle cx="15" cy="18" r="1.6" />
+					</svg>
+				</button>
 			</li>
 		</ul>
 

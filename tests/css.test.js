@@ -232,6 +232,25 @@ describe('the menu overlay', () => {
 	});
 });
 
+describe('the drag handle', () => {
+	it('opts out of touch gestures, or a finger on it scrolls the page instead of dragging', () => {
+		expect(read('app.css')).toMatch(/\.list__handle\s*\{[^}]*touch-action:\s*none/);
+	});
+
+	it('says what it is with the cursor — grab at rest, grabbing while held', () => {
+		expect(read('app.css')).toMatch(/\.list__handle\s*\{[^}]*cursor:\s*grab/);
+		expect(read('app.css')).toMatch(/\.list__handle:active\s*\{[^}]*cursor:\s*grabbing/);
+	});
+
+	it('marks the dragged row and the slot it will land in', () => {
+		const css = read('app.css');
+
+		expect(css).toMatch(/\.list__row\.is-dragging\s*\{/);
+		expect(css).toMatch(/\.list__row\.is-drop-before\s*\{/);
+		expect(css).toMatch(/\.list__row\.is-drop-after\s*\{/);
+	});
+});
+
 describe('delete mode', () => {
 	// Faded, not flattened: a row still says when it is due while the mode
 	// lasts, just quietly enough that a grey selection stands out against it.

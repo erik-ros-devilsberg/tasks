@@ -273,6 +273,43 @@ The FAB gives way to `.actionbar`
 Escape on the list leaves the mode too, unless the dialog is open, in which case it is the
 dialog's Escape.
 
+### `views/TasksListView.vue` — drag to reorder
+
+Every open row ends in a handle (`.list__handle`, six dots in `currentColor`, named "Reorder
+<title>"). It is the only part of the row that starts a drag: the name still opens the form
+and the tick still completes. Completed rows have none — a finished task has no position —
+and delete mode renders none, since a press there means select. Its click is stopped so a
+mode flip mid-press cannot turn it into a select.
+
+The view keeps a `Map` of row elements by id and hands `useDragReorder` a `rows()` that walks
+`tasks.open` — the store's sorted open list — rather than the DOM: that is the index space
+`tasks.reorder()` measures a drop in, and completed rows are left out of it by construction.
+The dragged row gets `.is-dragging` (dimmed in place); the slot is `.is-drop-before` on the
+row it will sit above, or `.is-drop-after` on the last open row — state classes on a
+neighbour, not an inserted element. A drop calls `tasks.reorder(id, index)` once; the list
+re-sorts from the store and a row that changed day recolours at once.
+
+### `composables/useDragReorder.js`
+
+Pointer Events, hand-rolled. The HTML5 drag-and-drop API does not start from touch on
+Android Chrome, and a library would be the app's first runtime dependency beyond Vue. One
+code path for mouse and finger: `pointerdown` on the handle captures the pointer and
+`preventDefault`s (with `touch-action: none` on the handle so Android does not take the
+gesture for a scroll and fire `pointercancel`); `pointermove`, `pointerup` and
+`pointercancel` are heard on `window`, Escape on `document`. Everything is torn down on
+release, cancel, Escape and unmount.
+
+Geometry comes in through `measure(el) → { top, bottom }` rather than being read inside:
+jsdom has no layout, and a slot computed from bounds nobody can hand in is a slot nobody can
+test. The slot is the number of remaining rows (the dragged one excluded) whose midpoint the
+pointer has passed — the index the task occupies after the drop, which is what `reorder()`
+takes. It is null while that index is the row's own, so no indicator promises a move that
+will not happen and a release there calls nothing. A release outside the rows' combined
+bounds cancels: a change of mind, not a drop at the nearest edge. Returns a `reactive`
+object, because refs nested in a plain object do not unwrap in a template.
+
+Keyboard reordering and edge auto-scroll are follow-ups (story to be written).
+
 ### `components/NavMenu.vue`
 
 The hamburger's overlay. Takes `hasTasks` to decide whether "Delete tasks" is offered — a
@@ -375,6 +412,10 @@ and not a boxed control. The FAB keeps its fill through `.btn--fab.btn--primary`
 mode adds `.actionbar` (fixed bottom, same right-edge maths as the FAB) and
 `.list__row.is-selected`, an inset bar in `currentColor` so the mark survives all five row
 backgrounds rather than fighting one of them.
+
+**Dev-server caveat:** `app.css` lives in `public/`, which Vite serves as a static file and
+never hot-reloads. After editing it, hard-reload the tab (Ctrl+Shift+R) — a component change
+arrives by HMR while the stylesheet stays stale, which looks like broken CSS and is not.
 
 ## Testing
 
@@ -603,6 +644,23 @@ task can rank above a timed one on the same date; and a task that changes day ta
 date-only form of the new day. Nothing is visible in the UI yet — a list where every `order`
 is `null` sorts exactly as before. The story stays in the backlog until the drag sprint
 closes it.
+
+### Task Order — Drag to Reorder (2026-09-17)
+
+The second half of story 14, and what closes it: a six-dot handle at the right end of every
+open row, `useDragReorder` on Pointer Events (mouse and touch as one path, no library), a
+dimmed dragged row and a line on the neighbour it will sit beside, Escape and release-outside
+to cancel, one `tasks.reorder()` call per drop. 548 tests.
+
+The indicator is a state class on a neighbouring row, not an inserted element — a small
+departure from the plan, taken because it adds no DOM and `.is-*` is what the sheet already
+uses. Geometry is injected into the composable so the slot arithmetic is tested in jsdom; the
+view tests stub `getBoundingClientRect` and run the real measure path. Keyboard reordering
+and edge auto-scroll are follow-ups; the manual Android pass is still owed.
+
+Two things learnt on the way: `public/app.css` is not hot-reloaded, so a CSS change looks
+broken until a hard reload (recorded under CSS); and refs nested in a plain object returned
+from a composable do not unwrap in a template — `useDragReorder` returns `reactive()`.
 
 ## 2026-09-16 — service worker cache name stamped at build time
 

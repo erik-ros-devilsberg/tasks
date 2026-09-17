@@ -173,14 +173,16 @@ describe('a row', () => {
 		expect(wrapper.find('.list__primary').text()).toContain('Buy milk');
 	});
 
-	it('carries a tick box and the name — and nothing else', async () => {
+	it('carries a tick box, the name and a drag handle — and nothing else', async () => {
 		const wrapper = await mounted(one({ due_at: '2026-09-05', notes: 'Some notes' }));
 		const row = wrapper.find('.list__row');
 
 		expect(row.find('input[type="checkbox"]').exists()).toBe(true);
 		expect(row.find('[data-action="open"]').exists()).toBe(true);
+		expect(row.find('[data-action="reorder"]').exists()).toBe(true);
 		expect(row.find('[data-action="delete"]').exists()).toBe(false);
-		expect(row.findAll('button')).toHaveLength(1);
+		expect(row.findAll('button')).toHaveLength(2);
+		expect(row.text()).not.toContain('Some notes');
 	});
 
 	it('draws the tick as the app\'s own control, not the browser\'s stock box', async () => {

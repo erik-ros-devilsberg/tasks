@@ -252,6 +252,21 @@ export const useTasksStore = defineStore('tasks', () => {
 	}
 
 	/**
+	 * Every delete lands on the device before the list is re-read, so the
+	 * caller's one `syncNow()` afterwards finds the whole batch already queued —
+	 * a sync started between two of them would push half a decision.
+	 */
+	async function removeMany(ids) {
+		for (const id of ids) {
+			await store().remove(id);
+		}
+
+		await readLocal();
+
+		return true;
+	}
+
+	/**
 	 * Empties everything, cache and queue alike. Called when a session ends:
 	 * this device is shared, and without it the next person to sign in reads the
 	 * previous account's tasks straight off the disk.
@@ -293,5 +308,6 @@ export const useTasksStore = defineStore('tasks', () => {
 		complete,
 		reopen,
 		remove,
+		removeMany,
 	};
 });

@@ -203,6 +203,26 @@ describe('pending work', () => {
 });
 
 describe('flushing', () => {
+	/*
+	 * The swap must store the server's record before it deletes the temporary
+	 * one. The other order has a window with neither on the device, and if the
+	 * store fails inside it — a record the adapter cannot key, a quota error —
+	 * the task is simply gone until the next pull happens to bring it back.
+	 */
+	it('keeps the task on the device when storing the server record fails', async () => {
+		const offline = store();
+		const created = await offline.create({ title: 'Buy milk' });
+
+		remote.create = vi.fn(async () => ({ data: { id: 'server-1', title: 'Buy milk' } }));
+
+		await expect(offline.flush()).rejects.toThrow();
+
+		const cached = await offline.cached();
+
+		expect(cached).toHaveLength(1);
+		expect(cached[0].id).toBe(created.id);
+	});
+
 	it('swaps the temporary record for the one the server issued', async () => {
 		const offline = store();
 		await offline.create({ title: 'Buy milk' });

@@ -450,6 +450,66 @@ describe('deleting', () => {
 	});
 });
 
+describe('deleting several at once', () => {
+	it('takes every named task off the list before anything is sent', async () => {
+		const remote = fakeServer([task('1'), task('2'), task('3')]);
+		const { tasks } = store(remote);
+		await tasks.syncNow();
+
+		await tasks.removeMany(['1', '3']);
+
+		expect(tasks.tasks.map((t) => t.id)).toEqual(['2']);
+		expect(remote.remove).not.toHaveBeenCalled();
+		expect(tasks.pendingCount).toBe(2);
+	});
+
+	it('sends one delete per task on the next sync', async () => {
+		const remote = fakeServer([task('1'), task('2'), task('3')]);
+		const { tasks } = store(remote);
+		await tasks.syncNow();
+
+		await tasks.removeMany(['1', '3']);
+		await tasks.syncNow();
+
+		expect(remote.remove).toHaveBeenCalledTimes(2);
+		expect(remote.remove).toHaveBeenCalledWith('1');
+		expect(remote.remove).toHaveBeenCalledWith('3');
+		expect(tasks.pendingCount).toBe(0);
+	});
+
+	it('drops a never-synced task from the batch without a request', async () => {
+		const remote = fakeServer([task('1')]);
+		const { tasks } = store(remote);
+		await tasks.syncNow();
+		const created = await tasks.create({ title: 'Buy milk' });
+
+		await tasks.removeMany(['1', created.id]);
+		await tasks.syncNow();
+
+		expect(remote.create).not.toHaveBeenCalled();
+		expect(remote.remove).toHaveBeenCalledTimes(1);
+		expect(remote.remove).toHaveBeenCalledWith('1');
+		expect(tasks.tasks).toEqual([]);
+	});
+
+	it('lets a 404 on one of the batch reconcile without holding up the rest', async () => {
+		const remote = fakeServer([task('1'), task('2')]);
+		const { tasks } = store(remote);
+		await tasks.syncNow();
+
+		remote.records.delete('1');
+		const realRemove = remote.remove;
+		remote.remove = vi.fn(async (id) => (id === '1' ? failing(404)() : realRemove(id)));
+
+		await tasks.removeMany(['1', '2']);
+		await tasks.syncNow();
+
+		expect(tasks.tasks).toEqual([]);
+		expect(tasks.pendingCount).toBe(0);
+		expect(tasks.error).toBe('');
+	});
+});
+
 describe('fetchOne', () => {
 	it('reads a held task without a request', async () => {
 		const { tasks, remote } = store(fakeServer([task('1')]));

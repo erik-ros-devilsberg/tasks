@@ -74,6 +74,7 @@ caller asked for.
 
 `listAll()` accepts either a bare array or a `{ data }` envelope — the server's pagination
 removal could land either way, and tolerating both means the app does not break mid-deploy.
+Since 2026-09-17 every single-record call unwraps the same envelope; see the note of that date.
 
 ### `lib/taskSort.js`
 
@@ -186,6 +187,9 @@ State: `tasks`, `loading`, `loaded`, `synced`, `syncing`, `error`, `unauthorized
   mount, on returning to the tab, on `online`, after a list action, and from the menu. An
   automatic push per write would send eight requests for eight edits and defeat the outbox's
   coalescing entirely.
+- `removeMany(ids)` applies every delete to the device before re-reading the list, so the
+  caller's one `syncNow()` afterwards finds the whole batch queued. Each id is its own
+  `delete` operation in the outbox; a `404` on one reconciles and the drain continues.
 
 Known gap: `now` refreshes on load and on sync, not on a timer. A tab left open past midnight
 keeps yesterday's tasks under "today" until the next sync.
@@ -208,6 +212,42 @@ The one destructive-action gate. A labelled `role="dialog"`, focus moved to **Ca
 user's hands), Escape and click-outside both close, Tab swaps between the two buttons, and
 focus returns to whatever opened it on unmount — without that last part a keyboard user is
 dumped back at the top of the document.
+
+### `views/TasksListView.vue` — delete mode
+
+A row in normal mode is a tick and a name; there is no per-row delete. Deleting is a mode
+entered from the menu ("Delete tasks", offered only while `tasks.visible` has something in
+it) and carried in the route as `?mode=delete` — not in the store, because it is not a
+preference: the Android back button, a menu choice and any navigation should all leave it,
+and a reload should land in the mode with nothing selected rather than a half-remembered
+selection. The selection itself is a local `Set` that is reset whenever the mode flips.
+
+In the mode, a click anywhere on the row toggles selection. The name's `open()` returns early
+rather than being disabled, so the one click still bubbles to the row. The tick *is* disabled
+— completing is not on offer while the mode is about deleting — and because a disabled control
+is not a hit target, `.list.is-delete-mode .tick` is given `pointer-events: none` so its clicks
+reach the row instead of dying on a dead patch in the middle of it. The cancelled click stays
+behind it: whatever reaches the box, it never flips and claims a task was done.
+
+The list carries `is-delete-mode`, which fades the row state colours to semi-transparent —
+`color-mix(in srgb, var(--row-bg) var(--row-dimmed), transparent)`, `--row-dimmed` at 40%.
+Faded, not flattened: a row still says when it is due, but on a screen of full overdue red
+and today's amber the inset `.is-selected` bar was the only thing marking a choice and
+losing. Selected rows go grey (`--row-selected`, the brand's `--bg-inset`); the bar stays as
+a second mark. Each state class only sets `--row-bg`/`--row-ink` and one rule paints, so the
+fade is one rule rather than five. Ink goes to `--fg` in the mode — Upcoming's dark ink was
+chosen for a solid green and disappears on a faded one.
+The FAB gives way to `.actionbar`
+— count, Cancel, Delete (disabled at zero). Delete asks once for the whole batch through
+`ConfirmModal`, then `removeMany()`, leaves the mode by replacing the query, and syncs once.
+Escape on the list leaves the mode too, unless the dialog is open, in which case it is the
+dialog's Escape.
+
+### `components/NavMenu.vue`
+
+The hamburger's overlay. Takes `hasTasks` to decide whether "Delete tasks" is offered — a
+mode whose only exit is Cancel is a dead end on an empty list — and emits `delete-mode`
+for `App.vue` to turn into the route change.
 
 ### `composables/useCompletedShown.js`
 
@@ -237,6 +277,11 @@ reopened. `duration` is **always present** in the body, never omitted: an absent
 Saving writes to the device and returns to the list immediately. There is no spinner on a
 round-trip that may never happen, and no per-field server errors — a local save cannot be
 refused. A change the server later rejects is reported on the list instead.
+
+No Delete on the form (removed 2026-09-17). Deleting is the list's delete mode and nowhere
+else: a second route to the same destructive act was a second confirmation to keep honest,
+and it sat a thumb's width from Save on a phone. The store's single `remove(id)` stays as
+the primitive under `removeMany`.
 
 ### `public/sw.js` and the manifest
 
@@ -287,6 +332,19 @@ enforced by a test.
 
 Accessibility floor, enforced or reviewed: a visible focus *ring* (not a background tint), a
 skip-to-content link, semantic landmarks, and `prefers-reduced-motion` honoured.
+
+### What `app.css` adds on top of the brand
+
+The brand's defaults are wrong for a task list on a phone in three places, all corrected
+in `app.css` as labelled blocks: `.list__row` is overridden to `--space-4` padding and gap
+with centred items, because a row is a thumb target; `.tick` replaces the browser's stock
+checkbox with one drawn in `currentColor` (`appearance: none`), so it takes each row's ink
+and keeps the brand's `:focus-visible` ring — still an `<input type="checkbox">` underneath;
+and `.btn--plain` strips `.btn--icon`'s grey outline from the hamburger, which is a glyph
+and not a boxed control. The FAB keeps its fill through `.btn--fab.btn--primary`. Delete
+mode adds `.actionbar` (fixed bottom, same right-edge maths as the FAB) and
+`.list__row.is-selected`, an inset bar in `currentColor` so the mark survives all five row
+backgrounds rather than fighting one of them.
 
 ## Testing
 
@@ -530,3 +588,31 @@ by background colour plus a screen-reader-only word — no due-date text, no bad
 One deliberate departure from the story text: the row colours are tokens in `app.css`'s
 `:root` block, not `tokens.css`. The brand sheets are copied byte for byte and a test fails
 if they drift, so an app-only colour has nowhere else to live.
+
+## 2026-09-17 — the disappearing new task
+
+A task saved on the device showed for about a second, vanished, and came back on the next
+sync — a tab switch, a click that gave the window focus. Reported as "tasks aren't syncing";
+the proxy, the network and the server were all fine, measured.
+
+The cause was the response envelope. Every single-record endpoint answers a Laravel resource,
+`{ data: { … } }`, and `tasksRemote` unwrapped only `listAll`. `sync.js` handed the envelope
+to `offlineStore.flush()` as the created record; `record.id` was `undefined`; `kv.del(local)`
+had already run; `kv.set(undefined, …)` threw `DataError` in IndexedDB. Flush threw, the
+sync's `finally` re-read a device that now held neither copy, and the row was gone until the
+next pull happened to list it.
+
+Two test doubles hid it. `memoryKv` is a `Map`, and a `Map` files a record under `undefined`
+without complaint, so the same sequence passed in every test. `tests/support/server.js` fakes
+the *remote* — the layer above the envelope — so no component or store test ever saw one.
+
+Three changes, all tested:
+
+- `tasksRemote` lifts the record out of `{ data }` on `get`, `create`, `update`, `replace`,
+  `complete` and `reopen`, and still accepts a bare record so the server can drop the
+  envelope without a lockstep deploy.
+- `memoryKv.set` refuses a missing key, as IndexedDB does. The fake has to be as strict as
+  the adapter it stands in for, or this class of bug is invisible to the suite.
+- `offlineStore.flush()` stores the server record **before** deleting the temporary one.
+  The other order has a window with neither on the device, and a store that fails inside it
+  loses the task.

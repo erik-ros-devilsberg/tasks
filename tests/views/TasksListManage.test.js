@@ -3,24 +3,37 @@ import { enableAutoUnmount, mount, flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 
 import TasksListView from '@/views/TasksListView.vue';
-import { useRemote, useTasksStore } from '@/stores/tasks';
+import { useOfflineStore, useRemote, useTasksStore } from '@/stores/tasks';
+import { createOfflineStore } from '@/lib/offlineStore';
+import { memoryKv } from '@/lib/kv';
 import { fakeServer, failing, task } from '../support/server';
 
 // The view listens on document and window for the tab coming back. A wrapper
 // left mounted keeps listening into the next test and syncs someone else's list.
 enableAutoUnmount(afterEach);
 
-const { pushMock, replaceMock } = vi.hoisted(() => ({ pushMock: vi.fn(), replaceMock: vi.fn() }));
+// The route is reactive, as the real one is: delete mode is read off it, so a
+// test has to be able to flip it and watch the view follow.
+const { pushMock, replaceMock, route } = await vi.hoisted(async () => {
+	const { reactive } = await import('vue');
+	return { pushMock: vi.fn(), replaceMock: vi.fn(), route: reactive({ query: {} }) };
+});
 vi.mock('vue-router', () => ({
 	useRouter: () => ({ push: pushMock, replace: replaceMock }),
-	useRoute: () => ({ query: {} }),
+	useRoute: () => route,
 	RouterLink: { template: '<a><slot /></a>' },
 }));
 
-async function mounted(remote = fakeServer(), { completedShown = false } = {}) {
+async function mounted(remote = fakeServer(), { completedShown = false, offline = null } = {}) {
 	const pinia = createPinia();
 	setActivePinia(pinia);
-	useRemote(remote);
+	// A test that needs the device to outlive the component — a reload — hands
+	// in a data layer it built itself over storage it keeps hold of.
+	if (offline) {
+		useOfflineStore(offline);
+	} else {
+		useRemote(remote);
+	}
 
 	const store = useTasksStore();
 	store.completedShown = completedShown;
@@ -51,7 +64,14 @@ beforeEach(() => {
 	vi.setSystemTime(NOW);
 	pushMock.mockClear();
 	replaceMock.mockClear();
+	route.query = {};
 });
+
+/** Mounted straight into delete mode, as the menu item would land it. */
+async function inDeleteMode(remote = fakeServer(), options = {}) {
+	route.query = { mode: 'delete' };
+	return mounted(remote, options);
+}
 
 afterEach(() => {
 	vi.useRealTimers();
@@ -211,65 +231,264 @@ describe('completed tasks in the list', () => {
 	});
 });
 
-describe('deleting from the list', () => {
-	it('asks before deleting, naming the task', async () => {
-		const { wrapper, remote } = await mounted(fakeServer([task('1', { title: 'Buy milk' })]));
+describe('normal mode', () => {
+	it('puts no delete control on a row', async () => {
+		const { wrapper } = await mounted(fakeServer([task('1')]));
 
-		await wrapper.find('[data-action="delete"]').trigger('click');
+		expect(wrapper.find('[data-action="delete"]').exists()).toBe(false);
+		expect(wrapper.find('.actionbar').exists()).toBe(false);
+	});
+});
+
+describe('delete mode', () => {
+	it('marks the list itself, so the rows can drop their state colours while the mode lasts', async () => {
+		const { wrapper } = await inDeleteMode(fakeServer([task('1')]));
+
+		expect(wrapper.find('.list').classes()).toContain('is-delete-mode');
+	});
+
+	it('leaves the list unmarked in normal mode', async () => {
+		const { wrapper } = await mounted(fakeServer([task('1')]));
+
+		expect(wrapper.find('.list').classes()).not.toContain('is-delete-mode');
+	});
+
+	it('disables the tick — completing is not on offer while the mode is about deleting', async () => {
+		const { wrapper } = await inDeleteMode(fakeServer([task('1')]));
+
+		expect(wrapper.find('input[type="checkbox"]').attributes('disabled')).toBeDefined();
+	});
+
+	it('leaves the tick usable in normal mode', async () => {
+		const { wrapper } = await mounted(fakeServer([task('1')]));
+
+		expect(wrapper.find('input[type="checkbox"]').attributes('disabled')).toBeUndefined();
+	});
+
+	it('is entered from the route, and swaps the add button for an action bar', async () => {
+		const { wrapper } = await inDeleteMode(fakeServer([task('1')]));
+
+		expect(wrapper.find('.actionbar').exists()).toBe(true);
+		expect(wrapper.find('[data-action="new-task"]').exists()).toBe(false);
+		expect(wrapper.find('.actionbar').text()).toContain('0 selected');
+		expect(wrapper.find('[data-action="delete-selected"]').attributes('disabled')).toBeDefined();
+	});
+
+	it('selects a task by clicking anywhere on its row, and says so', async () => {
+		const { wrapper } = await inDeleteMode(fakeServer([task('1')]));
+		const row = wrapper.find('.list__row');
+
+		await row.trigger('click');
+
+		expect(row.classes()).toContain('is-selected');
+		expect(row.attributes('aria-selected')).toBe('true');
+		expect(row.findAll('.visually-hidden').map((el) => el.text())).toContain('Selected');
+		expect(wrapper.find('.actionbar').text()).toContain('1 selected');
+		expect(wrapper.find('[data-action="delete-selected"]').attributes('disabled')).toBeUndefined();
+	});
+
+	it('deselects on a second click', async () => {
+		const { wrapper } = await inDeleteMode(fakeServer([task('1')]));
+		const row = wrapper.find('.list__row');
+
+		await row.trigger('click');
+		await row.trigger('click');
+
+		expect(row.classes()).not.toContain('is-selected');
+		expect(wrapper.find('.actionbar').text()).toContain('0 selected');
+	});
+
+	it('makes the name and the tick inert — a row click only ever selects', async () => {
+		const remote = fakeServer([task('1')]);
+		const { wrapper } = await inDeleteMode(remote);
+
+		await wrapper.find('[data-action="open"]').trigger('click');
+		await wrapper.find('input[type="checkbox"]').trigger('change');
+		await flushPromises();
+
+		expect(pushMock).not.toHaveBeenCalled();
+		expect(remote.complete).not.toHaveBeenCalled();
+		expect(wrapper.find('.list__row').classes()).toContain('is-selected');
+	});
+
+	/*
+	 * A real browser never delivers this click: the tick is disabled and taken
+	 * out of hit-testing, so the row answers for it. jsdom has no hit-testing,
+	 * so the test dispatches it straight at the box — which is the one way the
+	 * box could ever see it, and the point is that it still does not flip.
+	 */
+	it('leaves the tick visually where it was — a box that flips but saves nothing is a lie', async () => {
+		const { wrapper } = await inDeleteMode(fakeServer([task('1')]));
+		const box = wrapper.find('input[type="checkbox"]');
+
+		await box.trigger('click');
+
+		expect(box.element.checked).toBe(false);
+		expect(wrapper.find('.list__row').classes()).not.toContain('is-selected');
+	});
+
+	it('offers completed tasks for deletion too, when they are shown', async () => {
+		const { wrapper } = await inDeleteMode(
+			fakeServer([task('1'), task('2', { completed_at: '2026-08-30T10:00:00.000000Z' })]),
+			{ completedShown: true },
+		);
+
+		const rows = wrapper.findAll('.list__row');
+		await rows[0].trigger('click');
+		await rows[1].trigger('click');
+
+		expect(wrapper.find('.actionbar').text()).toContain('2 selected');
+	});
+
+	it('asks once for the whole batch before deleting anything', async () => {
+		const remote = fakeServer([task('1'), task('2'), task('3')]);
+		const { wrapper } = await inDeleteMode(remote);
+		const rows = wrapper.findAll('.list__row');
+
+		await rows[0].trigger('click');
+		await rows[2].trigger('click');
+		await wrapper.find('[data-action="delete-selected"]').trigger('click');
 
 		expect(wrapper.find('.modal').exists()).toBe(true);
-		expect(wrapper.find('.modal').text()).toContain('Buy milk');
+		expect(wrapper.find('.modal').text()).toMatch(/delete 2 tasks/i);
 		expect(remote.remove).not.toHaveBeenCalled();
 	});
 
-	it('deletes once confirmed', async () => {
-		const { wrapper, remote } = await mounted(fakeServer([task('1')]));
+	it('speaks in the singular for one task', async () => {
+		const { wrapper } = await inDeleteMode(fakeServer([task('1')]));
 
-		await wrapper.find('[data-action="delete"]').trigger('click');
+		await wrapper.find('.list__row').trigger('click');
+		await wrapper.find('[data-action="delete-selected"]').trigger('click');
+
+		expect(wrapper.find('.modal').text()).toMatch(/delete 1 task\?/i);
+	});
+
+	it('deletes every selected task once confirmed, and leaves the mode', async () => {
+		const remote = fakeServer([task('1'), task('2'), task('3')]);
+		const { wrapper } = await inDeleteMode(remote);
+		const rows = wrapper.findAll('.list__row');
+
+		await rows[0].trigger('click');
+		await rows[2].trigger('click');
+		await wrapper.find('[data-action="delete-selected"]').trigger('click');
 		await wrapper.find('[data-action="confirm"]').trigger('click');
 		await flushPromises();
 
+		expect(remote.remove).toHaveBeenCalledTimes(2);
 		expect(remote.remove).toHaveBeenCalledWith('1');
-		expect(wrapper.findAll('.list__row')).toHaveLength(0);
+		expect(remote.remove).toHaveBeenCalledWith('3');
+		expect(wrapper.findAll('.list__row')).toHaveLength(1);
+		expect(replaceMock).toHaveBeenCalledWith({ query: {} });
 	});
 
-	it('leaves the task alone when the dialog is cancelled', async () => {
-		const { wrapper, remote } = await mounted(fakeServer([task('1')]));
+	it('leaves everything alone when the dialog is cancelled', async () => {
+		const remote = fakeServer([task('1')]);
+		const { wrapper } = await inDeleteMode(remote);
 
-		await wrapper.find('[data-action="delete"]').trigger('click');
+		await wrapper.find('.list__row').trigger('click');
+		await wrapper.find('[data-action="delete-selected"]').trigger('click');
 		await wrapper.find('.modal').trigger('keydown', { key: 'Escape' });
 		await flushPromises();
 
 		expect(remote.remove).not.toHaveBeenCalled();
 		expect(wrapper.findAll('.list__row')).toHaveLength(1);
+		expect(wrapper.find('.list__row').classes()).toContain('is-selected');
+	});
+
+	it('cancels the mode itself from the bar, deleting nothing', async () => {
+		const remote = fakeServer([task('1')]);
+		const { wrapper } = await inDeleteMode(remote);
+
+		await wrapper.find('.list__row').trigger('click');
+		await wrapper.find('[data-action="cancel-delete"]').trigger('click');
+
+		expect(remote.remove).not.toHaveBeenCalled();
+		expect(replaceMock).toHaveBeenCalledWith({ query: {} });
+	});
+
+	it('cancels on Escape from the list', async () => {
+		const { wrapper } = await inDeleteMode(fakeServer([task('1')]));
+
+		await wrapper.find('.list__row').trigger('click');
+		await wrapper.trigger('keydown', { key: 'Escape' });
+
+		expect(replaceMock).toHaveBeenCalledWith({ query: {} });
+	});
+
+	it('forgets the selection and brings the add button back once the route leaves the mode', async () => {
+		const { wrapper } = await inDeleteMode(fakeServer([task('1')]));
+		await wrapper.find('.list__row').trigger('click');
+
+		route.query = {};
+		await wrapper.vm.$nextTick();
+
+		expect(wrapper.find('.actionbar').exists()).toBe(false);
+		expect(wrapper.find('[data-action="new-task"]').exists()).toBe(true);
+		expect(wrapper.find('.list__row').classes()).not.toContain('is-selected');
+
+		route.query = { mode: 'delete' };
+		await wrapper.vm.$nextTick();
+
+		expect(wrapper.find('.actionbar').text()).toContain('0 selected');
 	});
 
 	it('treats a task the server has already lost as deleted rather than reporting a 404', async () => {
-		const remote = fakeServer([task('1')]);
-		const { wrapper } = await mounted(remote);
+		const remote = fakeServer([task('1'), task('2')]);
+		const { wrapper } = await inDeleteMode(remote);
 
 		remote.records.delete('1');
-		remote.remove = failing(404);
+		const realRemove = remote.remove;
+		remote.remove = vi.fn(async (id) => (id === '1' ? failing(404)() : realRemove(id)));
 
-		await wrapper.find('[data-action="delete"]').trigger('click');
+		const rows = wrapper.findAll('.list__row');
+		await rows[0].trigger('click');
+		await rows[1].trigger('click');
+		await wrapper.find('[data-action="delete-selected"]').trigger('click');
 		await wrapper.find('[data-action="confirm"]').trigger('click');
 		await flushPromises();
 
 		expect(wrapper.findAll('.list__row')).toHaveLength(0);
 		expect(wrapper.find('.error').exists()).toBe(false);
+		expect(remote.remove).toHaveBeenCalledWith('2');
 	});
 
-	it('deletes with no connection and does not put the row back', async () => {
-		const remote = fakeServer([task('1')]);
-		const { wrapper } = await mounted(remote);
+	it('deletes the batch with no connection and does not put the rows back', async () => {
+		const remote = fakeServer([task('1'), task('2')]);
+		const { wrapper, store } = await inDeleteMode(remote);
 		unplug(remote);
 
-		await wrapper.find('[data-action="delete"]').trigger('click');
+		const rows = wrapper.findAll('.list__row');
+		await rows[0].trigger('click');
+		await rows[1].trigger('click');
+		await wrapper.find('[data-action="delete-selected"]').trigger('click');
 		await wrapper.find('[data-action="confirm"]').trigger('click');
 		await flushPromises();
 
 		expect(wrapper.findAll('.list__row')).toHaveLength(0);
 		expect(wrapper.find('.error').exists()).toBe(false);
+		expect(store.pendingCount).toBe(2);
+	});
+
+	it('keeps the queued batch across a reload', async () => {
+		const remote = fakeServer([task('1'), task('2')]);
+		const kv = memoryKv();
+		const outboxKv = memoryKv();
+		const offline = createOfflineStore({ kv, outboxKv, remote });
+		const { wrapper } = await inDeleteMode(remote, { offline });
+		unplug(remote);
+
+		const rows = wrapper.findAll('.list__row');
+		await rows[0].trigger('click');
+		await rows[1].trigger('click');
+		await wrapper.find('[data-action="delete-selected"]').trigger('click');
+		await wrapper.find('[data-action="confirm"]').trigger('click');
+		await flushPromises();
+		wrapper.unmount();
+
+		const { store } = await mounted(remote, { offline: createOfflineStore({ kv, outboxKv, remote }) });
+
+		expect(store.pendingCount).toBe(2);
+		expect(store.tasks).toEqual([]);
 	});
 });
 

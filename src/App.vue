@@ -57,6 +57,16 @@ function toggleCompleted() {
 	tasks.completedShown = !tasks.completedShown;
 }
 
+/**
+ * Delete mode lives in the route, not in state: the Android back button and
+ * any navigation then leave it for free, and a reload lands in the mode with
+ * nothing selected rather than in a half-remembered selection.
+ */
+function enterDeleteMode() {
+	menuOpen.value = false;
+	router.push({ path: '/', query: { mode: 'delete' } });
+}
+
 async function signOut() {
 	menuOpen.value = false;
 	await session.logout();
@@ -77,7 +87,7 @@ async function signOut() {
 			<div class="nav__links">
 				<button
 					v-if="session.isAuthenticated"
-					class="btn btn--ghost btn--icon"
+					class="btn btn--icon btn--plain"
 					type="button"
 					data-action="menu"
 					aria-label="Menu"
@@ -98,6 +108,8 @@ async function signOut() {
 		:completed-shown="tasks.completedShown"
 		:pending-count="tasks.pendingCount"
 		:syncing="tasks.syncing"
+		:has-tasks="tasks.visible.length > 0"
+		@delete-mode="enterDeleteMode"
 		@sync="sync"
 		@toggle-completed="toggleCompleted"
 		@sign-out="signOut"

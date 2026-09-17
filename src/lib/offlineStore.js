@@ -134,8 +134,13 @@ export function createOfflineStore({
 			// The server's record replaces the temporary one, and anything still
 			// queued against the temporary id is repointed — otherwise a
 			// completion made while the create was in flight would 404.
-			await kv.del(temporary);
+			//
+			// Stored before the temporary is deleted, not after: between the two
+			// the device holds neither, and a store that fails in that window —
+			// a record the adapter cannot key, a quota error — would leave the
+			// task gone until a later pull happened to bring it back.
 			await kv.set(record.id, record);
+			await kv.del(temporary);
 			await outbox.remapRecordId(temporary, record.id);
 		}
 

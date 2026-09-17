@@ -17,6 +17,14 @@ export function memoryKv() {
 			return map.has(key) ? clone(map.get(key)) : null;
 		},
 		async set(key, value) {
+			// IndexedDB throws DataError for a missing key; a Map would file the
+			// record under `undefined` and say nothing. The fake has to refuse
+			// what the real adapter refuses, or a record with no id passes every
+			// test and vanishes in the browser.
+			if (key === undefined || key === null) {
+				throw new TypeError('kv.set: a key is required.');
+			}
+
 			map.set(key, clone(value));
 		},
 		async del(key) {

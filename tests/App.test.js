@@ -9,9 +9,9 @@ import { TOKEN_KEY } from '@/stores/session';
 import { useRemote, useTasksStore } from '@/stores/tasks';
 import { fakeServer, failing, task } from './support/server';
 
-const { replaceMock } = vi.hoisted(() => ({ replaceMock: vi.fn() }));
+const { pushMock, replaceMock } = vi.hoisted(() => ({ pushMock: vi.fn(), replaceMock: vi.fn() }));
 vi.mock('vue-router', () => ({
-	useRouter: () => ({ replace: replaceMock }),
+	useRouter: () => ({ push: pushMock, replace: replaceMock }),
 	RouterView: { template: '<div />' },
 	RouterLink: { template: '<a><slot /></a>' },
 }));
@@ -57,6 +57,7 @@ beforeEach(() => {
 	localStorage.clear();
 	setOnline(true);
 	replaceMock.mockClear();
+	pushMock.mockClear();
 });
 
 afterEach(() => {
@@ -128,6 +129,46 @@ describe('the menu', () => {
 		expect(wrapper.find('[data-action="sync"]').exists()).toBe(true);
 		expect(wrapper.find('[data-action="toggle-completed"]').exists()).toBe(true);
 		expect(wrapper.find('[data-action="sign-out"]').exists()).toBe(true);
+	});
+
+	/** Signed in with the list already read, then the menu opened. */
+	async function withTasksAndMenuOpen(remote) {
+		localStorage.setItem(TOKEN_KEY, 'a-token');
+		const wrapper = mountApp(remote);
+		await useTasksStore().syncNow();
+		await wrapper.find('[data-action="menu"]').trigger('click');
+
+		return wrapper;
+	}
+
+	it('offers delete mode only when there is something to delete', async () => {
+		const wrapper = await withTasksAndMenuOpen(fakeServer([task('1')]));
+
+		expect(wrapper.find('[data-action="delete-mode"]').exists()).toBe(true);
+	});
+
+	it('hides delete mode from an empty list', async () => {
+		const wrapper = await withTasksAndMenuOpen(fakeServer([]));
+
+		expect(wrapper.find('[data-action="delete-mode"]').exists()).toBe(false);
+	});
+
+	it('enters delete mode through the route, so the back button can leave it', async () => {
+		const wrapper = await withTasksAndMenuOpen(fakeServer([task('1')]));
+
+		await wrapper.find('[data-action="delete-mode"]').trigger('click');
+
+		expect(pushMock).toHaveBeenCalledWith({ path: '/', query: { mode: 'delete' } });
+		expect(wrapper.find('.menu').exists()).toBe(false);
+	});
+
+	it('draws the hamburger without the brand\'s outline — it is a glyph, not a boxed control', () => {
+		localStorage.setItem(TOKEN_KEY, 'a-token');
+
+		const button = mountApp().find('[data-action="menu"]');
+
+		expect(button.classes()).toContain('btn--plain');
+		expect(button.classes()).not.toContain('btn--ghost');
 	});
 
 	it('closes on Escape, so the keyboard is never trapped behind it', async () => {

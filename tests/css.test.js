@@ -207,6 +207,65 @@ describe('the confirm dialog’s buttons', () => {
 	});
 });
 
+describe('the nav on a phone', () => {
+	// The brand's 768px rule gives .nav__links `width: 100%` and lets the bar
+	// wrap, which is right for a row of text links and wrong for one icon
+	// button: it drops the hamburger onto a line of its own under the wordmark.
+	it('keeps the hamburger on the wordmark’s line instead of wrapping under it', () => {
+		const mobile = read('app.css').match(/@media \(max-width: 768px\)\s*\{([\s\S]*?)\n\}/);
+
+		expect(mobile).not.toBeNull();
+		expect(mobile[1]).toMatch(/\.nav__links\s*\{[^}]*width:\s*auto/);
+		expect(mobile[1]).toMatch(/\.nav__links\s*\{[^}]*margin-left:\s*auto/);
+		expect(mobile[1]).toMatch(/\.nav__inner\s*\{[^}]*flex-wrap:\s*nowrap/);
+	});
+});
+
+describe('the menu overlay', () => {
+	// The overlay is fixed to the viewport, so on a wide screen its panel hugs
+	// the window edge while the hamburger that opened it sits inboard at the
+	// container's edge. Its gutter has to be the container's gutter.
+	it('lines its panel up with the container rather than the window', () => {
+		expect(read('app.css')).toMatch(
+			/\.menu\s*\{[^}]*padding-inline:[^;]*var\(--container-max\)[^;]*var\(--container-pad\)/,
+		);
+	});
+});
+
+describe('delete mode', () => {
+	// Faded, not flattened: a row still says when it is due while the mode
+	// lasts, just quietly enough that a grey selection stands out against it.
+	it('fades the row state colours to semi-transparent rather than dropping them', () => {
+		const rule = read('app.css').match(
+			/\.list\.is-delete-mode \.list__row\[class\*='list__row--'\]\s*\{([^}]*)\}/,
+		);
+
+		expect(rule).not.toBeNull();
+		expect(rule[1]).toMatch(/background-color:\s*color-mix\(in srgb,\s*var\(--row-bg\)\s*var\(--row-dimmed\),\s*transparent\)/);
+		expect(rule[1]).not.toMatch(/background-color:\s*var\(--bg\)/);
+	});
+
+	it('paints every state through one --row-bg, so the fade needs no rule per state', () => {
+		const css = read('app.css');
+
+		for (const state of ['overdue', 'today', 'upcoming', 'undated', 'completed']) {
+			expect(css).toMatch(new RegExp(`\\.list__row--${state}\\s*\\{[^}]*--row-bg:\\s*var\\(--row-${state}\\)`));
+		}
+
+		expect(css).toMatch(/\.list__row\[class\*='list__row--'\]\s*\{[^}]*background-color:\s*var\(--row-bg\)/);
+	});
+
+	it('greys a selected row, because an inset bar alone is too little to pick out at a glance', () => {
+		expect(read('app.css')).toMatch(
+			/\.list\.is-delete-mode \.list__row[^{]*\.is-selected[^{]*\{[^}]*background-color:\s*var\(--row-selected\)/,
+		);
+	});
+
+	it('lets a click on the disabled tick fall through to the row, so no part of it is dead', () => {
+		expect(read('app.css')).toMatch(/\.list\.is-delete-mode \.tick\s*\{[^}]*pointer-events:\s*none/);
+	});
+});
+
 describe('accessibility floor', () => {
 	it('gives focus a visible ring rather than a background tint alone', () => {
 		expect(read('base.css')).toMatch(/:focus-visible\s*\{[^}]*outline:/);

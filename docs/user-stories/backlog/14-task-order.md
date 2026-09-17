@@ -39,9 +39,8 @@ end of the task row.
 
 **Dragging**
 
-- Every open task row carries a drag handle at its right end, after the trash control. It
-  is the only part of the row that starts a drag — the name still opens the form and the
-  checkbox still completes.
+- Every open task row carries a drag handle at its right end. It is the only part of the
+  row that starts a drag — the name still opens the form and the checkbox still completes.
 - Dragging works with a mouse and with touch, since the app is installed on Android.
 - Completed rows have no handle, cannot be dragged, and a drag cannot be dropped between
   them.

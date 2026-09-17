@@ -26,7 +26,11 @@
 	--row-undated-ink: var(--ghost-white);
 	--row-completed: var(--bg-muted);
 	--row-completed-ink: var(--gray-faint);
+	--row-selected: var(--bg-inset);
+	/* How much of a row's state colour is left in delete mode. */
+	--row-dimmed: 40%;
 	--fab-size: 3.5rem;
+	--tick-size: 1.5rem;
 	--z-menu: 50;
 }
 
@@ -43,6 +47,24 @@
 
 .app-main:focus {
 	outline: none;
+}
+
+/* ---------- Nav on a phone (OVERRIDE) ----------
+   At 768px the brand lets the bar wrap and gives .nav__links the full width,
+   which suits a row of text links that needs a line of its own. Here the
+   links are one icon button, and the full width drops the hamburger onto a
+   line under the wordmark. It belongs beside it, on every width. */
+
+@media (max-width: 768px) {
+	.nav,
+	.nav__inner {
+		flex-wrap: nowrap;
+	}
+
+	.nav__links {
+		width: auto;
+		margin-left: auto;
+	}
 }
 
 /* ---------- Footer (ADDITION) ---------- */
@@ -69,9 +91,55 @@
 	border-top: 0;
 }
 
+/* Roomier than the brand's list: a row is a thumb target on a phone, and
+   the tick needs air on both sides to read as a control of its own. */
 .list__row {
-	gap: var(--space-3);
-	padding: var(--space-3) var(--container-pad);
+	align-items: center;
+	gap: var(--space-4);
+	padding: var(--space-4) var(--container-pad);
+}
+
+/* ---------- Selected row (ADDITION) ----------
+   Delete mode marks a chosen row with an inset bar in the row's own ink, so
+   the mark survives every state colour instead of fighting one of them. */
+
+.list__row.is-selected {
+	box-shadow: inset var(--space-1) 0 0 currentColor;
+}
+
+/* ---------- Tick (ADDITION) ----------
+   The brand styles a switch but not a checkbox, and the browser's stock box
+   ignores the row's ink. Drawn here in currentColor so it stays legible on
+   every row background. Still an <input type="checkbox"> underneath: the
+   label, keyboard and the brand's :focus-visible ring all keep working. */
+
+.tick {
+	appearance: none;
+	flex: 0 0 auto;
+	width: var(--tick-size);
+	height: var(--tick-size);
+	margin: 0;
+	border: 2px solid currentColor;
+	border-radius: var(--radius-sm);
+	background: transparent;
+	cursor: pointer;
+	display: grid;
+	place-content: center;
+}
+
+.tick::before {
+	content: '';
+	width: 0.45em;
+	height: 0.8em;
+	border: solid currentColor;
+	border-width: 0 3px 3px 0;
+	transform: rotate(45deg) scale(0);
+	transform-origin: center;
+	transition: transform var(--transition);
+}
+
+.tick:checked::before {
+	transform: rotate(45deg) translate(-1px, -2px) scale(1);
 }
 
 /* Also the row's own control — clicking the name opens the task. Styled to
@@ -89,31 +157,38 @@ button.list__primary {
 }
 
 /* ---------- List row states (ADDITION) ----------
-   State by colour, because the row carries no badge to say it. */
+   State by colour, because the row carries no badge to say it. Each state
+   only names its pair; one rule below paints. That indirection is what lets
+   delete mode fade every state with a single rule instead of five. */
 
 .list__row--overdue {
-	background-color: var(--row-overdue);
-	color: var(--row-overdue-ink);
+	--row-bg: var(--row-overdue);
+	--row-ink: var(--row-overdue-ink);
 }
 
 .list__row--today {
-	background-color: var(--row-today);
-	color: var(--row-today-ink);
+	--row-bg: var(--row-today);
+	--row-ink: var(--row-today-ink);
 }
 
 .list__row--upcoming {
-	background-color: var(--row-upcoming);
-	color: var(--row-upcoming-ink);
+	--row-bg: var(--row-upcoming);
+	--row-ink: var(--row-upcoming-ink);
 }
 
 .list__row--undated {
-	background-color: var(--row-undated);
-	color: var(--row-undated-ink);
+	--row-bg: var(--row-undated);
+	--row-ink: var(--row-undated-ink);
 }
 
 .list__row--completed {
-	background-color: var(--row-completed);
-	color: var(--row-completed-ink);
+	--row-bg: var(--row-completed);
+	--row-ink: var(--row-completed-ink);
+}
+
+.list__row[class*='list__row--'] {
+	background-color: var(--row-bg);
+	color: var(--row-ink);
 }
 
 /* Struck through and dimmed, so a finished task is something the eye skips
@@ -127,6 +202,35 @@ button.list__primary {
    fires; a plain tint would wash the state colour out anyway. Lift it. */
 .list__row[class*='list__row--']:hover {
 	filter: brightness(1.12);
+}
+
+/* ---------- Delete mode (ADDITION) ----------
+   The mode asks one question — which of these go — and the state colours
+   are only context for it. They fade rather than vanish: a row still says
+   when it is due, quietly enough that the grey of a selected row stands out
+   against it. The inset bar from .is-selected stays, but it is a detail at
+   the edge of a row; on a screen of full colour it was doing all the work on
+   its own and losing.
+
+   The ink goes to the page foreground for every state: Upcoming's dark ink
+   was chosen for a solid green and disappears on a faded one. A browser
+   without color-mix() drops the declaration and keeps the full colour. */
+
+.list.is-delete-mode .list__row[class*='list__row--'] {
+	background-color: color-mix(in srgb, var(--row-bg) var(--row-dimmed), transparent);
+	color: var(--fg);
+}
+
+.list.is-delete-mode .list__row[class*='list__row--'].is-selected {
+	background-color: var(--row-selected);
+}
+
+/* The tick is disabled here, and a disabled control is not a hit target —
+   the click would die on it instead of reaching the row. Taken out of
+   hit-testing altogether, so the row underneath answers for it. */
+.list.is-delete-mode .tick {
+	pointer-events: none;
+	opacity: 0.5;
 }
 
 /* ---------- Overdue mark (ADDITION) ----------
@@ -172,6 +276,53 @@ button.list__primary {
 	height: 1.5rem;
 }
 
+/* ---------- Plain icon button (ADDITION) ----------
+   .btn--icon boxes its glyph in a grey outline. The hamburger is a glyph in
+   the nav, not a boxed control, so this strips the box and keeps the target. */
+
+.btn--plain {
+	border-color: transparent;
+	background-color: transparent;
+}
+
+.btn--plain:hover {
+	border-color: transparent;
+	background-color: var(--bg-raised);
+}
+
+/* ---------- Action bar (ADDITION) ----------
+   Delete mode's replacement for the floating add button: fixed where the
+   thumb is, the count on the left, the two ways out on the right. Same
+   right-edge maths as the FAB so it lines up with the container. */
+
+.actionbar {
+	position: fixed;
+	right: max(var(--container-pad), calc(50vw - var(--container-max) / 2 + var(--container-pad)));
+	left: max(var(--container-pad), calc(50vw - var(--container-max) / 2 + var(--container-pad)));
+	bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
+	z-index: var(--z-nav);
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	padding: var(--space-3) var(--space-4);
+	border-radius: var(--radius);
+	background-color: var(--bg-raised);
+	box-shadow: var(--shadow-sm);
+}
+
+.actionbar__count {
+	flex: 1 1 auto;
+	font-family: var(--font-title);
+	font-size: var(--text-sm);
+	letter-spacing: var(--tracking-label);
+	text-transform: uppercase;
+}
+
+/* The bar's buttons are the brand's, only shorter: the bar is one row high. */
+.actionbar .btn {
+	padding: var(--space-3) var(--space-4);
+}
+
 /* ---------- Menu (ADDITION) ----------
    The nav's one button opens this: a dropdown under the bar, backdrop
    closes it. The brand has no menu component. */
@@ -183,7 +334,15 @@ button.list__primary {
 	display: flex;
 	justify-content: flex-end;
 	align-items: flex-start;
-	padding: var(--nav-height) var(--space-4) var(--space-4);
+	padding-block: var(--nav-height) var(--space-4);
+	/* The overlay covers the viewport, but the hamburger that opened it sits
+	   at the container's edge, not the window's. On a wide screen a panel at
+	   the window edge appears a long way from the button. The same gutter the
+	   container gets, so the panel lands under the button on every width. */
+	padding-inline: max(
+		var(--space-4),
+		calc((100% - var(--container-max)) / 2 + var(--container-pad))
+	);
 	background-color: var(--overlay);
 }
 

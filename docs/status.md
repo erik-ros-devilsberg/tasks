@@ -8,3 +8,4 @@ Maintained by the agile plugin. One row per sprint — updated by `/agile:shape`
 | Tasks On Screen | tasks-on-screen | done | Task API client, ordering rules and the grouped task list. |
 | Managing Tasks | managing-tasks | done | Complete, create, edit, delete, and review completed tasks. |
 | Duration, and an App That Works Offline | duration-and-offline-install | done | Optional duration in minutes; offline-first storage, sync queue and Android install. |
+| Row Styling and Delete Mode | row-styling-and-delete-mode | done | Roomier rows, custom tick, borderless icon buttons; multi-select delete mode replaces per-row trash. |

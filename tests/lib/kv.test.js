@@ -55,6 +55,19 @@ describe('the six methods every adapter has to satisfy', () => {
 
 		await expect(kv.all()).resolves.toEqual([]);
 	});
+
+	/*
+	 * IndexedDB refuses a missing key with DataError. A Map accepts `undefined`
+	 * as a key and says nothing, which is how a record with no id sailed through
+	 * every test and then vanished in the browser (2026-09-17). The fake has to
+	 * be as strict as the thing it stands in for.
+	 */
+	it('refuses to store under a missing key, as IndexedDB does', async () => {
+		await expect(kv.set(undefined, { title: 'no id' })).rejects.toThrow();
+		await expect(kv.set(null, { title: 'no id' })).rejects.toThrow();
+
+		await expect(kv.all()).resolves.toEqual([]);
+	});
 });
 
 describe('what comes back is a copy', () => {

@@ -426,50 +426,21 @@ describe('saving with no connection', () => {
 	});
 });
 
-describe('deleting from the form', () => {
-	it('asks before deleting rather than acting on the click', async () => {
+/*
+ * Deleting is the list's delete mode and nowhere else. Two routes to the same
+ * destructive act meant two confirmations to keep honest, and the one on the
+ * form sat a thumb's width from Save on a phone.
+ */
+describe('deleting is not the form’s job', () => {
+	it('offers no delete while editing — the list owns deleting', async () => {
 		editing();
-		const { wrapper, store } = await mountForm(fakeServer(), [task('1')]);
+		const { wrapper } = await mountForm(fakeServer(), [task('1')]);
 
-		await wrapper.find('[data-action="delete"]').trigger('click');
-
-		expect(wrapper.find('.modal').exists()).toBe(true);
-		expect(store.tasks).toHaveLength(1);
+		expect(wrapper.find('[data-action="delete"]').exists()).toBe(false);
+		expect(wrapper.text()).not.toMatch(/delete/i);
 	});
 
-	it('deletes and returns to the list once confirmed', async () => {
-		editing();
-		const { wrapper, store, remote } = await mountForm(fakeServer(), [task('1')]);
-
-		await wrapper.find('[data-action="delete"]').trigger('click');
-		await wrapper.find('[data-action="confirm"]').trigger('click');
-		await flushPromises();
-
-		expect(store.tasks).toEqual([]);
-		expect(pushMock).toHaveBeenCalledWith('/');
-
-		await store.syncNow();
-
-		expect(remote.remove).toHaveBeenCalledWith('1');
-	});
-
-	it('deletes with no connection, and sends it later', async () => {
-		editing();
-		const remote = fakeServer([task('1')]);
-		const { wrapper, store } = await mountForm(remote, []);
-
-		remote.listAll = failing(0);
-		remote.remove = failing(0);
-
-		await wrapper.find('[data-action="delete"]').trigger('click');
-		await wrapper.find('[data-action="confirm"]').trigger('click');
-		await flushPromises();
-
-		expect(store.tasks).toEqual([]);
-		expect(pushMock).toHaveBeenCalledWith('/');
-	});
-
-	it('offers no delete while creating — there is nothing to delete yet', async () => {
+	it('offers no delete while creating either', async () => {
 		const { wrapper } = await mountForm();
 
 		expect(wrapper.find('[data-action="delete"]').exists()).toBe(false);
@@ -489,10 +460,10 @@ describe('the order of the form actions', () => {
 		expect(labels(wrapper)).toEqual(['Cancel', 'Save']);
 	});
 
-	it('puts Delete first, which the brand rule pushes to the far left, away from Save', async () => {
+	it('shows the same two actions when editing — the row does not grow a third', async () => {
 		editing();
 		const { wrapper } = await mountForm(fakeServer(), [task('1')]);
 
-		expect(labels(wrapper)).toEqual(['Delete', 'Cancel', 'Save']);
+		expect(labels(wrapper)).toEqual(['Cancel', 'Save']);
 	});
 });

@@ -5,7 +5,6 @@ import { useRoute, useRouter } from 'vue-router';
 import { useTasksStore } from '@/stores/tasks';
 import { joinDue, splitDue } from '@/lib/dueFields';
 import { formatDuration, parseDuration } from '@/lib/durationField';
-import ConfirmModal from '@/components/ConfirmModal.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -29,7 +28,6 @@ const duration = ref('');
 
 const error = ref('');
 const busy = ref(false);
-const confirmingDelete = ref(false);
 /*
  * Set when the task being edited could not be found. The form must not be
  * submittable in that state: an empty form saved over a real record wipes its
@@ -102,12 +100,6 @@ async function submit() {
 	}
 }
 
-async function destroy() {
-	confirmingDelete.value = false;
-
-	await tasks.remove(id.value);
-	await router.push('/');
-}
 </script>
 
 <template>
@@ -160,21 +152,10 @@ async function destroy() {
 			<!--
 				Order is load-bearing: `.form__actions` is a right-aligned flex row with no
 				reversal, so the go button must come last in the markup to sit rightmost.
-				Delete stays first and the brand's `margin-right: auto` throws it to the far
-				left, out of misclick range of Save — and that keeps Cancel and Save in the
-				same place whether the form is creating or editing.
+				No Delete here: deleting is the list's delete mode, and a second route to
+				it meant a second confirmation to keep honest, a thumb's width from Save.
 			-->
 			<div class="form__actions">
-				<button
-					v-if="editing"
-					class="btn btn--danger"
-					type="button"
-					data-action="delete"
-					@click="confirmingDelete = true"
-				>
-					Delete
-				</button>
-
 				<button class="btn btn--ghost" type="button" @click="router.push('/')">Cancel</button>
 
 				<button class="btn btn--primary" type="submit" :disabled="busy || unloadable">
@@ -182,14 +163,5 @@ async function destroy() {
 				</button>
 			</div>
 		</form>
-
-		<ConfirmModal
-			v-if="confirmingDelete"
-			:title="`Delete “${title}”?`"
-			body="This cannot be undone."
-			confirm-label="Delete"
-			@confirm="destroy"
-			@cancel="confirmingDelete = false"
-		/>
 	</section>
 </template>

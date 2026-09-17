@@ -9,6 +9,18 @@ import { ApiError } from '@/lib/api';
  * omitted, and the completion endpoint takes no body at all.
  */
 export function createTasksRemote({ api }) {
+	/**
+	 * Every single-record endpoint answers `{ data: { … } }` — a Laravel
+	 * resource — and the record has to be lifted out before anything above
+	 * this file sees it. A bare record is accepted too, so the server can drop
+	 * the envelope without a lockstep deploy.
+	 *
+	 * The cost of missing this was a task that vanished a second after it was
+	 * saved: the sync took the envelope for the record, found no `id` on it,
+	 * and IndexedDB refused the key after the local copy was already gone.
+	 */
+	const record = (data) => (data && typeof data === 'object' && 'data' in data ? data.data : data);
+
 	async function listAll() {
 		const data = await api.get('/tasks');
 
@@ -25,32 +37,34 @@ export function createTasksRemote({ api }) {
 	return {
 		listAll,
 
-		get: (id) => api.get(`/tasks/${id}`),
+		get: async (id) => record(await api.get(`/tasks/${id}`)),
 
-		create: (body) => api.post('/tasks', body),
+		create: async (body) => record(await api.post('/tasks', body)),
 
 		// PATCH, not PUT: a partial body must leave the omitted fields alone.
 		// The same call is therefore safe on a completed task.
-		update: (id, body) => api.patch(`/tasks/${id}`, body),
+		update: async (id, body) => record(await api.patch(`/tasks/${id}`, body)),
 
 		/**
 		 * Full replacement. The caller must pass a complete record — every
 		 * omitted field is wiped, and an omitted `completed_at` silently
 		 * reopens the task.
 		 */
-		replace: (id, task) =>
-			api.put(`/tasks/${id}`, {
-				title: task.title,
-				notes: task.notes,
-				due_at: task.due_at,
-				duration: task.duration,
-				completed_at: task.completed_at,
-			}),
+		replace: async (id, task) =>
+			record(
+				await api.put(`/tasks/${id}`, {
+					title: task.title,
+					notes: task.notes,
+					due_at: task.due_at,
+					duration: task.duration,
+					completed_at: task.completed_at,
+				}),
+			),
 
 		// No body. The server stamps completed_at itself and is idempotent.
-		complete: (id) => api.post(`/tasks/${id}/complete`),
+		complete: async (id) => record(await api.post(`/tasks/${id}/complete`)),
 
-		reopen: (id) => api.patch(`/tasks/${id}`, { completed_at: null }),
+		reopen: async (id) => record(await api.patch(`/tasks/${id}`, { completed_at: null })),
 
 		async remove(id) {
 			try {

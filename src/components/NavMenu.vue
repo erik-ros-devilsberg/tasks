@@ -5,9 +5,10 @@ defineProps({
 	completedShown: { type: Boolean, default: false },
 	pendingCount: { type: Number, default: 0 },
 	syncing: { type: Boolean, default: false },
+	hasTasks: { type: Boolean, default: false },
 });
 
-const emit = defineEmits(['sync', 'toggle-completed', 'sign-out', 'close']);
+const emit = defineEmits(['sync', 'toggle-completed', 'delete-mode', 'sign-out', 'close']);
 
 const panel = ref(null);
 
@@ -59,6 +60,21 @@ onUnmounted(() => {
 				@click="emit('toggle-completed')"
 			>
 				{{ completedShown ? 'Hide completed' : 'Show completed' }}
+			</button>
+
+			<!--
+				Withheld from an empty list: a mode whose only exit is Cancel is
+				a dead end when there is nothing in it to select.
+			-->
+			<button
+				v-if="hasTasks"
+				class="menu__item"
+				type="button"
+				role="menuitem"
+				data-action="delete-mode"
+				@click="emit('delete-mode')"
+			>
+				Delete tasks
 			</button>
 
 			<button

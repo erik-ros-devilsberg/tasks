@@ -73,6 +73,61 @@ describe('listAll', () => {
 	});
 });
 
+/*
+ * Every single-record endpoint answers with a Laravel resource envelope,
+ * `{ data: { … } }`. The 2026-09-17 disappearing-task bug was `create`
+ * returning the envelope whole: `record.id` was undefined, IndexedDB refused
+ * the key, and the local copy had already been deleted.
+ */
+describe('the { data } envelope on single records', () => {
+	const wrapped = (record) => ({ data: record });
+
+	it('unwraps a created task, so the sync gets a record with an id', async () => {
+		fetchMock.mockResolvedValue(response(201, wrapped(task('9', { title: 'New' }))));
+
+		const created = await remote().create({ title: 'New' });
+
+		expect(created.id).toBe('9');
+		expect(created.data).toBeUndefined();
+	});
+
+	it('unwraps a fetched task', async () => {
+		fetchMock.mockResolvedValue(response(200, wrapped(task('9'))));
+
+		expect((await remote().get('9')).id).toBe('9');
+	});
+
+	it('unwraps a patched task', async () => {
+		fetchMock.mockResolvedValue(response(200, wrapped(task('9', { notes: 'x' }))));
+
+		expect((await remote().update('9', { notes: 'x' })).notes).toBe('x');
+	});
+
+	it('unwraps a replaced task', async () => {
+		fetchMock.mockResolvedValue(response(200, wrapped(task('9'))));
+
+		expect((await remote().replace('9', task('9'))).id).toBe('9');
+	});
+
+	it('unwraps a completed task', async () => {
+		fetchMock.mockResolvedValue(response(200, wrapped(task('9', { completed_at: '2026-09-17T04:00:00Z' }))));
+
+		expect((await remote().complete('9')).completed_at).toBe('2026-09-17T04:00:00Z');
+	});
+
+	it('unwraps a reopened task', async () => {
+		fetchMock.mockResolvedValue(response(200, wrapped(task('9'))));
+
+		expect((await remote().reopen('9')).completed_at).toBeNull();
+	});
+
+	it('still accepts a bare record, so the server can drop the envelope without a lockstep deploy', async () => {
+		fetchMock.mockResolvedValue(response(201, task('9')));
+
+		expect((await remote().create({})).id).toBe('9');
+	});
+});
+
 describe('create', () => {
 	it('posts the body and returns the created task', async () => {
 		fetchMock.mockResolvedValue(response(201, task('1', { title: 'Buy milk' })));

@@ -13,6 +13,7 @@ const task = (id, over = {}) => ({
 	notes: null,
 	due_at: null,
 	duration: null,
+	order: null,
 	completed_at: null,
 	...over,
 });
@@ -507,6 +508,137 @@ describe('deleting several at once', () => {
 		expect(tasks.tasks).toEqual([]);
 		expect(tasks.pendingCount).toBe(0);
 		expect(tasks.error).toBe('');
+	});
+});
+
+describe('reordering', () => {
+	const shown = (tasks) => tasks.open.map((t) => t.id);
+
+	it('re-sorts the list on the device before anything is sent', async () => {
+		const remote = fakeServer([
+			task('a', { due_at: '2026-09-01', order: 0 }),
+			task('b', { due_at: '2026-09-01', order: 1 }),
+			task('c', { due_at: '2026-09-01', order: 2 }),
+		]);
+		const { tasks } = store(remote);
+		await tasks.syncNow();
+		remote.update = failing(0);
+		remote.listAll = failing(0);
+
+		await tasks.reorder('c', 0);
+
+		expect(shown(tasks)).toEqual(['c', 'a', 'b']);
+		expect(tasks.pendingCount).toBe(3);
+	});
+
+	it('sends one PATCH per changed task on the next sync, and none carries completed_at', async () => {
+		const remote = fakeServer([
+			task('a', { due_at: '2026-09-01', order: 0 }),
+			task('b', { due_at: '2026-09-01', order: 1 }),
+			task('c', { due_at: '2026-09-02', order: 0 }),
+		]);
+		const { tasks } = store(remote);
+		await tasks.syncNow();
+
+		await tasks.reorder('c', 0);
+
+		expect(remote.update).toHaveBeenCalledTimes(3);
+		expect(remote.update).toHaveBeenCalledWith('c', { order: 0, due_at: '2026-09-01' });
+		expect(remote.update).toHaveBeenCalledWith('a', { order: 1 });
+		expect(remote.update).toHaveBeenCalledWith('b', { order: 2 });
+
+		for (const [, body] of remote.update.mock.calls) {
+			expect(body).not.toHaveProperty('completed_at');
+		}
+
+		expect(tasks.pendingCount).toBe(0);
+	});
+
+	it('syncs once, by itself, after the drop', async () => {
+		const remote = fakeServer([
+			task('a', { due_at: '2026-09-01', order: 0 }),
+			task('b', { due_at: '2026-09-01', order: 1 }),
+		]);
+		const { tasks } = store(remote);
+		await tasks.syncNow();
+		remote.listAll.mockClear();
+
+		await tasks.reorder('b', 0);
+
+		expect(remote.listAll).toHaveBeenCalledTimes(1);
+	});
+
+	it('coalesces two offline drags of one task into a single update carrying the last order', async () => {
+		const remote = fakeServer([
+			task('a', { due_at: '2026-09-01', order: 0 }),
+			task('b', { due_at: '2026-09-01', order: 1 }),
+			task('c', { due_at: '2026-09-01', order: 2 }),
+		]);
+		const { tasks } = store(remote);
+		await tasks.syncNow();
+		const realUpdate = remote.update;
+		remote.update = failing(0);
+		remote.listAll = failing(0);
+
+		await tasks.reorder('c', 0);
+		await tasks.reorder('c', 2);
+
+		expect(shown(tasks)).toEqual(['a', 'b', 'c']);
+		expect(tasks.pendingCount).toBeLessThanOrEqual(3);
+
+		remote.update = realUpdate;
+		remote.listAll = vi.fn(async () => [...remote.records.values()]);
+		await tasks.syncNow();
+
+		const forC = remote.update.mock.calls.filter(([id]) => id === 'c');
+
+		expect(forC).toHaveLength(1);
+		expect(forC[0][1]).toEqual({ order: 2 });
+	});
+
+	it('shows what the server holds after a pull — a reorder made elsewhere shows up here', async () => {
+		const remote = fakeServer([
+			task('a', { due_at: '2026-09-01', order: 0 }),
+			task('b', { due_at: '2026-09-01', order: 1 }),
+		]);
+		const { tasks } = store(remote);
+		await tasks.syncNow();
+
+		remote.records.set('a', task('a', { due_at: '2026-09-01', order: 1 }));
+		remote.records.set('b', task('b', { due_at: '2026-09-01', order: 0 }));
+		await tasks.syncNow();
+
+		expect(shown(tasks)).toEqual(['b', 'a']);
+	});
+
+	it('does nothing for a drop onto the same position', async () => {
+		const remote = fakeServer([
+			task('a', { due_at: '2026-09-01', order: 0 }),
+			task('b', { due_at: '2026-09-01', order: 1 }),
+		]);
+		const { tasks } = store(remote);
+		await tasks.syncNow();
+
+		await tasks.reorder('b', 1);
+
+		expect(remote.update).not.toHaveBeenCalled();
+		expect(tasks.pendingCount).toBe(0);
+	});
+
+	it('leaves completed tasks out of the index space — the drop index counts open rows only', async () => {
+		const remote = fakeServer([
+			task('done', { completed_at: SERVER_AT }),
+			task('a', { due_at: '2026-09-01', order: 0 }),
+			task('b', { due_at: '2026-09-01', order: 1 }),
+		]);
+		const { tasks } = store(remote);
+		await tasks.syncNow();
+		tasks.completedShown = true;
+
+		await tasks.reorder('b', 0);
+
+		expect(shown(tasks)).toEqual(['b', 'a']);
+		expect(remote.update).not.toHaveBeenCalledWith('done', expect.anything());
 	});
 });
 

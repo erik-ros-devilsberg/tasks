@@ -5,6 +5,8 @@ import {
 	isCompleted,
 	isOverdue,
 	dueHasTime,
+	dayOf,
+	orderOf,
 	sortOpen,
 	sortCompleted,
 	stateOf,
@@ -16,6 +18,7 @@ const task = (id, over = {}) => ({
 	title: `Task ${id}`,
 	notes: null,
 	due_at: null,
+	order: null,
 	completed_at: null,
 	...over,
 });
@@ -141,7 +144,106 @@ describe('ordering open tasks', () => {
 	});
 });
 
+/*
+ * `order` is the second key behind the calendar day. Most tasks never get one,
+ * so every rule above has to hold unchanged for a list where it is null
+ * throughout — the tests above are that list.
+ */
+describe('ordering open tasks by explicit position', () => {
+	it('ranks ordered tasks first within a day, ascending', () => {
+		const tasks = [
+			task('c', { due_at: '2026-09-01', order: 2 }),
+			task('a', { due_at: '2026-09-01', order: 0 }),
+			task('b', { due_at: '2026-09-01', order: 1 }),
+		];
+
+		expect(sortOpen(tasks).map((t) => t.id)).toEqual(['a', 'b', 'c']);
+	});
+
+	it('puts unordered tasks of the same day after the ordered ones, by time then title', () => {
+		const tasks = [
+			task('late', { title: 'zzz', due_at: '2026-09-01T16:00:00Z' }),
+			task('early', { title: 'aaa', due_at: '2026-09-01T09:00:00Z' }),
+			task('ordered', { title: 'mmm', due_at: '2026-09-01', order: 0 }),
+			task('dated-b', { title: 'b', due_at: '2026-09-01' }),
+			task('dated-a', { title: 'a', due_at: '2026-09-01' }),
+		];
+
+		expect(sortOpen(tasks).map((t) => t.id)).toEqual([
+			'ordered',
+			'dated-a',
+			'dated-b',
+			'early',
+			'late',
+		]);
+	});
+
+	it('never lets order cross a day — a later day with order 0 stays after an earlier day', () => {
+		const tasks = [
+			task('tomorrow', { due_at: '2026-09-02', order: 0 }),
+			task('today', { due_at: '2026-09-01' }),
+		];
+
+		expect(sortOpen(tasks).map((t) => t.id)).toEqual(['today', 'tomorrow']);
+	});
+
+	it('lets order override time of day within a day — that is the point of dragging', () => {
+		const tasks = [
+			task('morning', { due_at: '2026-09-01T09:00:00Z', order: 1 }),
+			task('evening', { due_at: '2026-09-01T20:00:00Z', order: 0 }),
+		];
+
+		expect(sortOpen(tasks).map((t) => t.id)).toEqual(['evening', 'morning']);
+	});
+
+	it('sorts the undated tail by order, then title', () => {
+		const tasks = [
+			task('z', { title: 'zzz' }),
+			task('a', { title: 'aaa' }),
+			task('second', { title: 'yyy', order: 1 }),
+			task('first', { title: 'xxx', order: 0 }),
+		];
+
+		expect(sortOpen(tasks).map((t) => t.id)).toEqual(['first', 'second', 'a', 'z']);
+	});
+
+	it('breaks an order tie on title, so two tasks numbered alike still sort stably', () => {
+		const tasks = [
+			task('b', { title: 'banana', due_at: '2026-09-01', order: 0 }),
+			task('a', { title: 'apple', due_at: '2026-09-01', order: 0 }),
+		];
+
+		expect(sortOpen(tasks).map((t) => t.id)).toEqual(['a', 'b']);
+	});
+
+	it('treats anything that is not a whole number >= 0 as no order at all', () => {
+		expect(orderOf(task('1', { order: 3 }))).toBe(3);
+		expect(orderOf(task('1', { order: 0 }))).toBe(0);
+		expect(orderOf(task('1', { order: null }))).toBeNull();
+		expect(orderOf(task('1', { order: -1 }))).toBeNull();
+		expect(orderOf(task('1', { order: 1.5 }))).toBeNull();
+		expect(orderOf(task('1', { order: '2' }))).toBeNull();
+		expect(orderOf({ id: '1', title: 'no field' })).toBeNull();
+	});
+
+	it('keys a day off the date part only, so a timed and a date-only task share a day', () => {
+		expect(dayOf(task('1', { due_at: '2026-09-01' }))).toBe('2026-09-01');
+		expect(dayOf(task('1', { due_at: '2026-09-01T14:30:00Z' }))).toBe('2026-09-01');
+		expect(dayOf(task('1'))).toBeNull();
+	});
+});
+
 describe('ordering completed tasks', () => {
+	it('ignores order entirely — completed_at is the only key', () => {
+		const tasks = [
+			task('first-done', { order: 5, completed_at: '2026-09-01T08:00:00.000000Z' }),
+			task('last-done', { order: 0, completed_at: '2026-09-01T18:00:00.000000Z' }),
+		];
+
+		expect(sortCompleted(tasks).map((t) => t.id)).toEqual(['last-done', 'first-done']);
+	});
+
+
 	it('puts the most recently finished first — that is what a user looks for', () => {
 		const tasks = [
 			task('old', { completed_at: '2026-08-01T10:00:00.000000Z' }),
@@ -173,6 +275,11 @@ describe('the state a row is coloured by', () => {
 
 	it('calls a task due after today upcoming', () => {
 		expect(stateOf(task('1', { due_at: '2026-09-05' }), now)).toBe('upcoming');
+	});
+
+	it('is blind to order — an overdue task is overdue wherever order puts it', () => {
+		expect(stateOf(task('1', { due_at: '2026-08-29', order: 0 }), now)).toBe('overdue');
+		expect(stateOf(task('1', { order: 0 }), now)).toBe('undated');
 	});
 
 	it('calls a task with no due date undated', () => {

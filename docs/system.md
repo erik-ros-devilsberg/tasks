@@ -72,6 +72,9 @@ explicit `PUT` that sends a complete record including `completed_at`; `complete(
 body at all**; `remove()` treats a `404` as success, because "already gone" is the outcome the
 caller asked for.
 
+`replace()` sends `order` as an explicit `null` when the task has none — PUT replaces whole,
+and an absent key is a cleared one.
+
 `listAll()` accepts either a bare array or a `{ data }` envelope — the server's pagination
 removal could land either way, and tolerating both means the app does not break mid-deploy.
 Since 2026-09-17 every single-record call unwraps the same envelope; see the note of that date.
@@ -81,10 +84,31 @@ Since 2026-09-17 every single-record call unwraps the same envelope; see the not
 Ordering and grouping, framework-free. The server sends `due_at` and `completed_at` and
 nothing else — **"overdue" and "today" are decisions this module makes, not fields it reads.**
 
-Open tasks sort soonest-first with undated last and ties broken by title, so the order does
-not shuffle between loads. Completed tasks sort most-recent-first. `groupOpen()` buckets into
-Overdue / Today / Upcoming / No due date and drops empty groups. Sorting always returns a new
-array; sorting in place would mutate store state from under the views.
+Open tasks sort by **calendar day** soonest-first, undated last. Within a day, tasks with an
+explicit `order` come first, ascending; tasks without one follow by time of day, then title.
+The undated tail is one more group, `order` then title. `dayOf()` keys a day off the date
+part of `due_at` (`YYYY-MM-DD`), so a timed and a date-only task on the same date share a day
+and `order` can rank a dragged task above a timed one — that is the point of dragging.
+`orderOf()` reads `order` and treats anything that is not a whole number `>= 0` as `null`
+rather than refusing the record. Days compare as strings, never as `Date`s, which is how a
+due date gets shifted by a time zone. Completed tasks sort most-recent-first; `order` plays
+no part. Sorting always returns a new array; sorting in place would mutate store state from
+under the views.
+
+### `lib/reorder.js`
+
+What a drop means, as a pure function: `reorder(shown, draggedId, targetIndex)` takes the
+open list in displayed order and the index the task should occupy afterwards, and returns
+`[{ id, order, due_at? }]` — the changes that make it so. The task takes the day it lands
+in (date-only; a time carried across would be one the user never set, and `null` for the
+undated tail), and that day is renumbered `0..n` in the sequence shown. Only records whose
+number changed are returned; the day it left is not renumbered, since a gap says nothing
+about relative order. A drop on its own slot returns `[]`.
+
+The slot between two days is ambiguous. Own day wins when it is either neighbour, so a drag
+that merely reaches the edge of its day cannot silently change a date; otherwise the day
+above ("after those tasks" is how the slot reads), and at the very top the day below.
+A change never carries `completed_at` — the function only ever sees open tasks.
 
 A date-only task is late only once the *next* day begins — it has all day. A timed task is
 late the moment its time passes.
@@ -190,6 +214,12 @@ State: `tasks`, `loading`, `loaded`, `synced`, `syncing`, `error`, `unauthorized
 - `removeMany(ids)` applies every delete to the device before re-reading the list, so the
   caller's one `syncNow()` afterwards finds the whole batch queued. Each id is its own
   `delete` operation in the outbox; a `404` on one reconciles and the drain continues.
+- `reorder(draggedId, targetIndex)` plans the drop with `lib/reorder.js` against `open` —
+  which is sorted for exactly this reason: the n-th open row on screen is the n-th entry —
+  applies the changes through `offlineStore.updateMany()`, re-reads, then syncs once itself.
+  Each change is an ordinary `update`, so two offline drags of one task coalesce and none
+  can carry `completed_at`. `targetIndex` counts open rows only; completed rows are not
+  positions a task can take.
 
 Known gap: `now` refreshes on load and on sync, not on a timer. A tab left open past midnight
 keeps yesterday's tasks under "today" until the next sync.
@@ -559,6 +589,20 @@ screen that still looks signed in; the completion checkbox binds to the record r
 literal, and is re-synced by hand after a failure, because Vue will not re-patch a prop it
 believes is unchanged — without that a failed complete left a ticked box permanently claiming
 the task was done; and `toggle` now uses `isOpen` rather than its own narrower `=== null` test.
+
+### Task Order — Field, Sort and Reorder Logic (2026-09-17)
+
+The first half of story 14, kept deliberately pointer-free: `order` on the wire, the
+day-then-order sort key in `taskSort`, the pure `lib/reorder.js` that turns a drop into a
+set of PATCHes, `offlineStore.updateMany()` and the store's `reorder()` action. All of it is
+`lib/` and store code, testable without a DOM; the drag sprint only has to call
+`tasks.reorder(draggedId, targetIndex)`. 514 tests.
+
+Two decisions taken while shaping: a "date" for ordering is the calendar day, so a dragged
+task can rank above a timed one on the same date; and a task that changes day takes the
+date-only form of the new day. Nothing is visible in the UI yet — a list where every `order`
+is `null` sorts exactly as before. The story stays in the backlog until the drag sprint
+closes it.
 
 ## 2026-09-16 — service worker cache name stamped at build time
 

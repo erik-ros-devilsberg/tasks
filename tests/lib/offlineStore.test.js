@@ -16,6 +16,7 @@ const task = (id, over = {}) => ({
 	notes: null,
 	due_at: null,
 	duration: null,
+	order: null,
 	completed_at: null,
 	...over,
 });
@@ -133,6 +134,45 @@ describe('editing offline', () => {
 		await offline.update('1', { title: 'Renamed', completed_at: null });
 
 		await expect(offline.get('1')).resolves.toMatchObject({ completed_at: AT });
+	});
+});
+
+describe('editing several at once', () => {
+	it('applies every change to the device and queues one update per record', async () => {
+		await kv.set('a', task('a', { due_at: '2026-09-01', order: 0 }));
+		await kv.set('b', task('b', { due_at: '2026-09-02', order: 0 }));
+
+		const offline = store();
+		await offline.updateMany([
+			{ id: 'a', order: 1 },
+			{ id: 'b', order: 0, due_at: '2026-09-01' },
+		]);
+
+		await expect(offline.get('a')).resolves.toMatchObject({ order: 1, due_at: '2026-09-01' });
+		await expect(offline.get('b')).resolves.toMatchObject({ order: 0, due_at: '2026-09-01' });
+		await expect(offline.pendingIds()).resolves.toEqual(expect.arrayContaining(['a', 'b']));
+		await expect(offline.pendingCount()).resolves.toBe(2);
+	});
+
+	it('survives a reload — a second store over the same storage still sees the queue', async () => {
+		await kv.set('a', task('a', { due_at: '2026-09-01' }));
+		await store().updateMany([{ id: 'a', order: 0 }]);
+
+		const reopened = store();
+
+		await expect(reopened.pendingIds()).resolves.toEqual(['a']);
+		await expect(reopened.get('a')).resolves.toMatchObject({ order: 0 });
+	});
+
+	it('strips completed_at from every change, like a single edit does', async () => {
+		await kv.set('a', task('a', { completed_at: AT }));
+
+		await store().updateMany([{ id: 'a', order: 0, completed_at: null }]);
+
+		const { createOutbox } = await import('@/lib/outbox');
+		const [entry] = await createOutbox({ kv: outboxKv }).pending();
+
+		expect(entry.payload).toEqual({ order: 0 });
 	});
 });
 

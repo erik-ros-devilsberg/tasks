@@ -19,6 +19,7 @@ const task = (id, over = {}) => ({
 	notes: null,
 	due_at: null,
 	duration: null,
+	order: null,
 	completed_at: null,
 	...over,
 });
@@ -185,6 +186,23 @@ describe('update', () => {
 			duration: null,
 			completed_at: '2026-08-30T10:00:00.000000Z',
 		});
+	});
+
+	it('carries order through a replacement — PUT is a full body, and an absent key clears it', async () => {
+		const ordered = task('1', { order: 3 });
+		fetchMock.mockResolvedValue(response(200, ordered));
+
+		await remote().replace('1', ordered);
+
+		expect(lastBody()).toHaveProperty('order', 3);
+	});
+
+	it('sends order as an explicit null when the task has none, never as an absent key', async () => {
+		fetchMock.mockResolvedValue(response(200, task('1')));
+
+		await remote().replace('1', task('1'));
+
+		expect(lastBody()).toHaveProperty('order', null);
 	});
 
 	it('carries duration through a replacement, which would otherwise wipe it', async () => {

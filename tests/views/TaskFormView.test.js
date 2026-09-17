@@ -351,6 +351,20 @@ describe('editing a task', () => {
 		expect(remote.update).toHaveBeenCalledWith('1', expect.objectContaining({ title: 'Renamed' }));
 	});
 
+	it('sends no order key at all, so a PATCH leaves the position a drag gave it', async () => {
+		editing();
+		const { wrapper, store, remote } = await mountForm(fakeServer(), [task('1', { order: 4 })]);
+
+		await field(wrapper, 'title').setValue('Renamed');
+		await submit(wrapper);
+		await store.syncNow();
+
+		const [, body] = remote.update.mock.calls.at(-1);
+
+		expect(body).not.toHaveProperty('order');
+		expect(store.tasks[0].order).toBe(4);
+	});
+
 	it('does not reopen a completed task it is editing', async () => {
 		editing();
 		const { wrapper, store, remote } = await mountForm(fakeServer(), [
@@ -394,6 +408,20 @@ describe('when the task cannot be found', () => {
 		await submit(wrapper);
 
 		expect(store.tasks).toEqual([]);
+	});
+});
+
+describe('what a create sends', () => {
+	it('sends no order key — a new task has no position until it is dragged', async () => {
+		const { wrapper, store, remote } = await mountForm();
+
+		await field(wrapper, 'title').setValue('Buy milk');
+		await submit(wrapper);
+		await store.syncNow();
+
+		const [body] = remote.create.mock.calls.at(-1);
+
+		expect(body).not.toHaveProperty('order');
 	});
 });
 

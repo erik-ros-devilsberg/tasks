@@ -17,6 +17,7 @@ export const task = (id, over = {}) => ({
 	notes: null,
 	due_at: null,
 	duration: null,
+	order: null,
 	completed_at: null,
 	...over,
 });

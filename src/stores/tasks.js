@@ -4,7 +4,8 @@ import { defineStore } from 'pinia';
 import { createKv, memoryKv } from '@/lib/kv';
 import { createOfflineStore } from '@/lib/offlineStore';
 import { createTasksRemote } from '@/lib/tasksRemote';
-import { isCompleted, isOpen, listTasks, sortCompleted } from '@/lib/taskSort';
+import { isCompleted, isOpen, listTasks, sortCompleted, sortOpen } from '@/lib/taskSort';
+import { reorder as planReorder } from '@/lib/reorder';
 import { readCompletedShown, writeCompletedShown } from '@/lib/completedPreference';
 import { useSessionStore } from '@/stores/session';
 
@@ -91,7 +92,9 @@ export const useTasksStore = defineStore('tasks', () => {
 	const completedShown = ref(readCompletedShown());
 	watch(completedShown, writeCompletedShown);
 
-	const open = computed(() => tasks.value.filter(isOpen));
+	// Sorted, because it is also the index space a drop is measured in: the
+	// n-th open row on screen is the n-th entry here.
+	const open = computed(() => sortOpen(tasks.value.filter(isOpen)));
 	const completed = computed(() => sortCompleted(tasks.value.filter(isCompleted)));
 	// One flat list — completed tasks mixed in by the same ordering rule, not
 	// pushed into a section of their own.
@@ -252,6 +255,27 @@ export const useTasksStore = defineStore('tasks', () => {
 	}
 
 	/**
+	 * A drop. `targetIndex` counts open rows in displayed order — completed
+	 * rows are not positions a task can take. The plan is computed against the
+	 * same sorted list the view renders, applied to the device whole, and the
+	 * list re-read before the sync starts, so the rows settle at once and the
+	 * network is only ever catching up.
+	 */
+	async function reorder(draggedId, targetIndex) {
+		const changes = planReorder(open.value, draggedId, targetIndex);
+
+		if (changes.length === 0) {
+			return false;
+		}
+
+		await store().updateMany(changes);
+		await readLocal();
+		await syncNow();
+
+		return true;
+	}
+
+	/**
 	 * Every delete lands on the device before the list is re-read, so the
 	 * caller's one `syncNow()` afterwards finds the whole batch already queued —
 	 * a sync started between two of them would push half a decision.
@@ -309,5 +333,6 @@ export const useTasksStore = defineStore('tasks', () => {
 		reopen,
 		remove,
 		removeMany,
+		reorder,
 	};
 });

@@ -2,8 +2,9 @@
  * Ordering and grouping. Framework-free, so the judgements below can be tested
  * without a DOM.
  *
- * The server sends `due_at` and `completed_at` and nothing else — "overdue" and
- * "today" are decisions this module makes, not fields it reads.
+ * The server sends `due_at`, `completed_at` and an optional `order` — "overdue"
+ * and "today" are decisions this module makes, not fields it reads. `order` is
+ * the one thing it reads as given: a position the user chose by dragging.
  */
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
@@ -89,30 +90,87 @@ const sameDay = (a, b) =>
 const byTitle = (a, b) => (a.title ?? '').localeCompare(b.title ?? '', undefined, { sensitivity: 'base' });
 
 /**
- * Soonest first, undated last, ties broken by title so the order does not
- * shuffle between loads. Returns a new array — sorting in place would mutate
+ * The calendar day a task belongs to, as the `YYYY-MM-DD` it was registered
+ * with, or null when undated. A timed task and a date-only task on the same
+ * date share a day: ordering happens within days, and a time of day is a
+ * detail inside one, not a day of its own.
+ */
+export function dayOf(task) {
+	const parts = typeof task?.due_at === 'string' ? PARTS.exec(task.due_at) : null;
+
+	return parts === null ? null : `${parts[1]}-${parts[2]}-${parts[3]}`;
+}
+
+/**
+ * The explicit position, or null. Anything that is not a whole number >= 0 is
+ * treated as no position rather than refused — the server validates what it
+ * stores, and a client that threw on a stray value would lose the whole list
+ * to one bad record.
+ */
+export function orderOf(task) {
+	const order = task?.order;
+
+	return Number.isInteger(order) && order >= 0 ? order : null;
+}
+
+/*
+ * Within one day. Explicit positions first, ascending; then the tasks nobody
+ * has placed, by time of day and then title. A dragged task beating a timed
+ * one is the point: the drag is the user saying which comes first.
+ */
+function withinDay(a, b) {
+	const orderA = orderOf(a);
+	const orderB = orderOf(b);
+
+	if (orderA !== null && orderB !== null) {
+		return orderA - orderB || byTitle(a, b);
+	}
+
+	if (orderA !== null) {
+		return -1;
+	}
+
+	if (orderB !== null) {
+		return 1;
+	}
+
+	const dueA = dueDate(a);
+	const dueB = dueDate(b);
+	const timeA = dueA === null ? 0 : dueA.getTime();
+	const timeB = dueB === null ? 0 : dueB.getTime();
+
+	return timeA - timeB || byTitle(a, b);
+}
+
+/**
+ * Soonest day first, undated last, and within a day the user's own order
+ * before anything else. Returns a new array — sorting in place would mutate
  * the store's state from underneath the views.
+ *
+ * Days compare as the strings they were registered with. `YYYY-MM-DD` sorts
+ * lexically in date order, and it keeps the comparison off `Date`, which is
+ * how a due date gets shifted a day by a time zone.
  */
 export function sortOpen(tasks) {
 	return [...tasks].sort((a, b) => {
-		const dueA = dueDate(a);
-		const dueB = dueDate(b);
+		const dayA = dayOf(a);
+		const dayB = dayOf(b);
 
-		if (dueA === null && dueB === null) {
-			return byTitle(a, b);
+		if (dayA === dayB) {
+			return withinDay(a, b);
 		}
 
 		// A task with a deadline outranks one without: the dated task is the one
 		// that can actually be late.
-		if (dueA === null) {
+		if (dayA === null) {
 			return 1;
 		}
 
-		if (dueB === null) {
+		if (dayB === null) {
 			return -1;
 		}
 
-		return dueA.getTime() - dueB.getTime() || byTitle(a, b);
+		return dayA < dayB ? -1 : 1;
 	});
 }
 

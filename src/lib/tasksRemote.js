@@ -57,6 +57,9 @@ export function createTasksRemote({ api }) {
 					notes: task.notes,
 					due_at: task.due_at,
 					duration: task.duration,
+					// Explicit null rather than an absent key: PUT replaces whole,
+					// and an omitted order is a cleared one.
+					order: task.order ?? null,
 					completed_at: task.completed_at,
 				}),
 			),

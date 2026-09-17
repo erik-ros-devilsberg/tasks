@@ -96,6 +96,18 @@ export function createOfflineStore({
 	}
 
 	/**
+	 * Several edits landed before anything is sent: a drop renumbers a whole
+	 * day, and a sync starting between two of them would push half a decision.
+	 * Each is an ordinary update, so the same completion guard and the same
+	 * per-record coalescing apply.
+	 */
+	async function updateMany(changes) {
+		for (const { id, ...fields } of changes) {
+			await update(id, fields);
+		}
+	}
+
+	/**
 	 * Stamps the moment the box was ticked rather than the moment a connection
 	 * came back — that is when the user finished the task, and it is what keeps
 	 * the list in a sensible order in the meantime. The stamp is a placeholder:
@@ -221,6 +233,7 @@ export function createOfflineStore({
 		refresh,
 		create,
 		update,
+		updateMany,
 		complete,
 		reopen,
 		remove,

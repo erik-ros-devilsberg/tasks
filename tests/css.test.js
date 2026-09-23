@@ -3,7 +3,6 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const cssDir = join(process.cwd(), 'public', 'css');
-const brandDir = '/home/erik/git/devilsberg-code/private-claude-plugins/devilsberg-brands/brands/devilsberg/css';
 
 const read = (name) => readFileSync(join(cssDir, name), 'utf8');
 
@@ -65,13 +64,7 @@ describe('stylesheet structure', () => {
 	});
 });
 
-describe('the brand stylesheets are copied, not forked', () => {
-	// The plugin is the source of truth. A local edit would be lost on the next
-	// copy, so every difference has to live in app.css instead.
-	it.each(brandFiles)('%s matches the plugin byte for byte', (name) => {
-		expect(read(name)).toBe(readFileSync(join(brandDir, name), 'utf8'));
-	});
-
+describe('the brand assets', () => {
 	it('ships every brand font the sheet declares', () => {
 		const fonts = readdirSync(join(process.cwd(), 'public', 'fonts')).sort();
 

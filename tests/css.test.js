@@ -101,10 +101,6 @@ describe('shared class inventory', () => {
 		'.list',
 		'.list__header',
 		'.list__row',
-		'.list__row--overdue',
-		'.list__row--today',
-		'.list__row--upcoming',
-		'.list__row--undated',
 		'.list__row--completed',
 		'.list__primary',
 		'.list__secondary',
@@ -251,29 +247,19 @@ describe('the drag handle', () => {
 	});
 });
 
-describe('delete mode', () => {
-	// Faded, not flattened: a row still says when it is due while the mode
-	// lasts, just quietly enough that a grey selection stands out against it.
-	it('fades the row state colours to semi-transparent rather than dropping them', () => {
-		const rule = read('app.css').match(
-			/\.list\.is-delete-mode \.list__row\[class\*='list__row--'\]\s*\{([^}]*)\}/,
-		);
-
-		expect(rule).not.toBeNull();
-		expect(rule[1]).toMatch(/background-color:\s*color-mix\(in srgb,\s*var\(--row-bg\)\s*var\(--row-dimmed\),\s*transparent\)/);
-		expect(rule[1]).not.toMatch(/background-color:\s*var\(--bg\)/);
-	});
-
-	it('paints every state through one --row-bg, so the fade needs no rule per state', () => {
+describe('row state', () => {
+	it('leaves an open row on the page background, whatever its due state', () => {
+		// State by colour read as a telling-off: a screen of red is discouraging
+		// exactly where action is wanted. The due date text carries the state
+		// instead, so no row is painted and delete mode has nothing to fade.
 		const css = read('app.css');
 
-		for (const state of ['overdue', 'today', 'upcoming', 'undated', 'completed']) {
-			expect(css).toMatch(new RegExp(`\\.list__row--${state}\\s*\\{[^}]*--row-bg:\\s*var\\(--row-${state}\\)`));
-		}
-
-		expect(css).toMatch(/\.list__row\[class\*='list__row--'\]\s*\{[^}]*background-color:\s*var\(--row-bg\)/);
+		expect(css).not.toMatch(/--row-bg/);
+		expect(css).not.toMatch(/\.list__row--(overdue|today|upcoming|undated)\s*\{/);
 	});
+});
 
+describe('delete mode', () => {
 	it('greys a selected row, because an inset bar alone is too little to pick out at a glance', () => {
 		expect(read('app.css')).toMatch(
 			/\.list\.is-delete-mode \.list__row[^{]*\.is-selected[^{]*\{[^}]*background-color:\s*var\(--row-selected\)/,

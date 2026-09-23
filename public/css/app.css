@@ -10,25 +10,15 @@
    ========================================================================== */
 
 /* ---------- Tokens (ADDITION) ----------
-   Row state colours. The brand palette has no amber and no dark red, and
-   its dimmed ink (--fg-soft) is too loud for a struck-through row, so these
-   are app tokens. Every fill is paired with the ink that stays legible on it. */
+   What the brand palette has no name for: a dimmed ink for a completed row
+   (--fg-soft is too loud under a strikethrough) and the amber the pending
+   badge wants, which is neither a warning nor an error. */
 
 :root {
 	--gray-faint: #8b98a1;
-	--row-overdue: #8f0f26;
-	--row-overdue-ink: var(--ghost-white);
-	--row-today: #b35c00;
-	--row-today-ink: var(--ghost-white);
-	--row-upcoming: #0bbf5c;
-	--row-upcoming-ink: var(--onyx);
-	--row-undated: rgba(11, 191, 92, 0.42);
-	--row-undated-ink: var(--ghost-white);
-	--row-completed: var(--bg-muted);
 	--row-completed-ink: var(--gray-faint);
 	--row-selected: var(--bg-inset);
-	/* How much of a row's state colour is left in delete mode. */
-	--row-dimmed: 40%;
+	--pending: #b35c00;
 	--fab-size: 3.5rem;
 	--tick-size: 1.5rem;
 	--z-menu: 50;
@@ -202,72 +192,28 @@ button.list__primary {
 	box-shadow: inset 0 -3px 0 0 var(--fg);
 }
 
-/* ---------- List row states (ADDITION) ----------
-   State by colour, because the row carries no badge to say it. Each state
-   only names its pair; one rule below paints. That indirection is what lets
-   delete mode fade every state with a single rule instead of five. */
-
-.list__row--overdue {
-	--row-bg: var(--row-overdue);
-	--row-ink: var(--row-overdue-ink);
-}
-
-.list__row--today {
-	--row-bg: var(--row-today);
-	--row-ink: var(--row-today-ink);
-}
-
-.list__row--upcoming {
-	--row-bg: var(--row-upcoming);
-	--row-ink: var(--row-upcoming-ink);
-}
-
-.list__row--undated {
-	--row-bg: var(--row-undated);
-	--row-ink: var(--row-undated-ink);
-}
+/* ---------- Completed row (ADDITION) ----------
+   Rows carry no state colour. A wall of red for everything overdue read as a
+   telling-off, which is the opposite of what a task list is for — the due date
+   text says when a task is due and that is enough. The one state still worth
+   marking is done: struck through and dimmed, so a finished task is something
+   the eye skips on the way past rather than a line it has to read to dismiss.
+   The brand has .is-done for this; the app derives the state from the record. */
 
 .list__row--completed {
-	--row-bg: var(--row-completed);
-	--row-ink: var(--row-completed-ink);
+	color: var(--row-completed-ink);
 }
 
-.list__row[class*='list__row--'] {
-	background-color: var(--row-bg);
-	color: var(--row-ink);
-}
-
-/* Struck through and dimmed, so a finished task is something the eye skips
-   on the way past rather than a line it has to read to dismiss. The brand
-   has .is-done for this; the app derives the state name from the record. */
 .list__row--completed .list__primary {
 	text-decoration: line-through;
 }
 
-/* Rows are <li>, so the brand's hover (a./button.list__row only) never
-   fires; a plain tint would wash the state colour out anyway. Lift it. */
-.list__row[class*='list__row--']:hover {
-	filter: brightness(1.12);
-}
-
 /* ---------- Delete mode (ADDITION) ----------
-   The mode asks one question — which of these go — and the state colours
-   are only context for it. They fade rather than vanish: a row still says
-   when it is due, quietly enough that the grey of a selected row stands out
-   against it. The inset bar from .is-selected stays, but it is a detail at
-   the edge of a row; on a screen of full colour it was doing all the work on
-   its own and losing.
+   The mode asks one question — which of these go — so the selected row is the
+   only thing painted. The inset bar from .is-selected is a detail at the edge
+   of a row and was too little to pick out at a glance on its own. */
 
-   The ink goes to the page foreground for every state: Upcoming's dark ink
-   was chosen for a solid green and disappears on a faded one. A browser
-   without color-mix() drops the declaration and keeps the full colour. */
-
-.list.is-delete-mode .list__row[class*='list__row--'] {
-	background-color: color-mix(in srgb, var(--row-bg) var(--row-dimmed), transparent);
-	color: var(--fg);
-}
-
-.list.is-delete-mode .list__row[class*='list__row--'].is-selected {
+.list.is-delete-mode .list__row.is-selected {
 	background-color: var(--row-selected);
 }
 
@@ -280,8 +226,9 @@ button.list__primary {
 }
 
 /* ---------- Overdue mark (ADDITION) ----------
-   Overdue is never signalled by colour alone — the row also carries a text
-   label. This just makes it findable at a glance for those who can see it. */
+   The word is the signal — this only makes it findable at a glance for those
+   who can see it. It is a mark on one line of text, not a painted row: the
+   list says a task is late without shouting at anyone about it. */
 
 .is-overdue {
 	color: var(--error);
@@ -437,6 +384,6 @@ button.list__primary {
    told yet, which is why the same task may look different elsewhere for now.
    Amber rather than fuchsia, because nothing is wrong. */
 .badge--pending {
-	border-color: var(--row-today);
-	color: var(--row-today);
+	border-color: var(--pending);
+	color: var(--pending);
 }

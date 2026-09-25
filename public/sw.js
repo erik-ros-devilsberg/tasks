@@ -9,7 +9,8 @@
  * never bumped by hand. The browser only installs a new worker when this file
  * changes, so a hand-bumped name that got forgotten once left every phone on
  * the old bundle. The '-dev' name below is what the source ships with and
- * what a build must never contain.
+ * what a build must never contain. Only /agile:commit bumps version.json, so
+ * a commit made by hand ships a build that phones never pick up.
  *
  * main.css only @imports its parts, so every part is listed individually. The
  * bundle is listed by a fixed name, which is why vite.config.js turns off

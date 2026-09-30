@@ -154,33 +154,79 @@ async function destroySelected() {
 </script>
 
 <template>
-	<section class="container" @keydown.esc="deleteMode && !confirming && leaveDeleteMode()">
-		<!-- The wordmark in the nav already names this view; a second "Tasks"
-			 on screen is noise. The heading stays for structure. -->
-		<h1 class="visually-hidden">Tasks</h1>
-
+	<section @keydown.esc="deleteMode && !confirming && leaveDeleteMode()">
 		<!--
-			Shown alongside the list rather than instead of it: a change the server
-			refused still leaves the rest of the list worth looking at.
+			The toolbar and messages keep the page gutter; the list below does not,
+			so its row colours reach the edge. That split is why the section itself
+			is not the container.
 		-->
-		<p v-if="tasks.error" class="error">{{ tasks.error }}</p>
+		<div class="container">
+			<!--
+				In the flow, not pinned to the screen: a fixed button slid off a phone
+				whenever the address bar or a zoom moved the viewport under it.
+			-->
+			<div v-if="!deleteMode" class="toolbar">
+				<div class="toolbar__actions">
+					<button
+						class="btn btn--primary"
+						type="button"
+						data-action="new-task"
+						@click="router.push('/tasks/new')"
+					>
+						<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+							<path d="M12 5v14M5 12h14" />
+						</svg>
+						New task
+					</button>
+				</div>
+			</div>
 
-		<p v-if="tasks.loading && tasks.tasks.length === 0" class="text-muted">Loading your tasks…</p>
+			<!--
+				Takes the add button's place: in delete mode the only thing worth
+				doing is finishing or abandoning the selection. One Delete for the
+				whole batch, one confirmation, and the mode is over.
+			-->
+			<div v-else class="toolbar" role="toolbar" aria-label="Delete tasks">
+				<span class="toolbar__count" aria-live="polite">{{ selectedCount }} selected</span>
+				<div class="toolbar__actions">
+					<button class="btn btn--ghost" type="button" data-action="cancel-delete" @click="leaveDeleteMode">
+						Cancel
+					</button>
+					<button
+						class="btn btn--danger"
+						type="button"
+						data-action="delete-selected"
+						:disabled="selectedCount === 0"
+						@click="confirming = true"
+					>
+						Delete
+					</button>
+				</div>
+			</div>
 
-		<!--
-			Gated on the sync having got through. The device always answers, so an
-			empty cache is a fact once we have heard from the server — but on a
-			device that has never managed a sync it is a guess, and telling someone
-			whose first launch happened to be offline that they have no tasks is a
-			lie they cannot check.
-		-->
-		<p v-else-if="tasks.loaded && tasks.synced && tasks.tasks.length === 0" class="text-muted">
-			No tasks yet. Add one and it will show up here.
-		</p>
+			<!--
+				Shown alongside the list rather than instead of it: a change the server
+				refused still leaves the rest of the list worth looking at.
+			-->
+			<p v-if="tasks.error" class="error">{{ tasks.error }}</p>
 
-		<p v-else-if="tasks.loaded && tasks.tasks.length > 0 && tasks.visible.length === 0" class="text-muted">
-			Nothing open. Everything here is done.
-		</p>
+			<p v-if="tasks.loading && tasks.tasks.length === 0" class="text-muted">Loading your tasks…</p>
+
+			<!--
+				Gated on the sync having got through. The device always answers, so an
+				empty cache is a fact once we have heard from the server — but on a
+				device that has never managed a sync it is a guess, and telling someone
+				whose first launch happened to be offline that they have no tasks is a
+				lie they cannot check.
+			-->
+			<p v-else-if="tasks.loaded && tasks.synced && tasks.tasks.length === 0" class="text-muted">
+				No tasks yet. Add one and it will show up here.
+			</p>
+
+			<p v-else-if="tasks.loaded && tasks.tasks.length > 0 && tasks.visible.length === 0" class="text-muted">
+				Nothing open. Everything here is done.
+			</p>
+		</div>
 
 		<!-- One list, no headings: the background colour says what a group label used to. -->
 		<ul class="list" :class="{ 'is-delete-mode': deleteMode }">
@@ -263,45 +309,6 @@ async function destroySelected() {
 				</button>
 			</li>
 		</ul>
-
-		<!--
-			Pinned to the bottom rather than sat in a toolbar: on a phone this is
-			the one control worth putting under the thumb, and it stays reachable
-			however far down the list the user has scrolled.
-		-->
-		<button
-			v-if="!deleteMode"
-			class="btn btn--primary btn--icon btn--fab"
-			type="button"
-			data-action="new-task"
-			aria-label="New task"
-			@click="router.push('/tasks/new')"
-		>
-			<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-				<path d="M12 5v14M5 12h14" />
-			</svg>
-		</button>
-
-		<!--
-			Takes the FAB's place: in delete mode the one thing worth a thumb is
-			finishing or abandoning the selection. One Delete for the whole batch,
-			one confirmation, and the mode is over.
-		-->
-		<div v-if="deleteMode" class="actionbar" role="toolbar" aria-label="Delete tasks">
-			<span class="actionbar__count" aria-live="polite">{{ selectedCount }} selected</span>
-			<button class="btn btn--ghost" type="button" data-action="cancel-delete" @click="leaveDeleteMode">
-				Cancel
-			</button>
-			<button
-				class="btn btn--danger"
-				type="button"
-				data-action="delete-selected"
-				:disabled="selectedCount === 0"
-				@click="confirming = true"
-			>
-				Delete
-			</button>
-		</div>
 
 		<ConfirmModal
 			v-if="confirming"

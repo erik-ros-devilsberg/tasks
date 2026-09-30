@@ -29,7 +29,6 @@
 	--row-selected: var(--bg-inset);
 	/* How much of a row's state colour is left in delete mode. */
 	--row-dimmed: 40%;
-	--fab-size: 3.5rem;
 	--tick-size: 1.5rem;
 	--z-menu: 50;
 }
@@ -37,16 +36,10 @@
 /* ---------- Shell (OVERRIDE) ----------
    The brand's .app-main carries the page gutter itself; here each view is a
    .container that carries its own, so the gutter is dropped from the shell
-   to avoid doubling it. The bottom padding leaves room for the floating add
-   button, so it never sits over the last task. */
+   to avoid doubling it. */
 
 .app-main {
 	padding-inline: 0;
-	padding-bottom: calc(var(--fab-size) + var(--space-6) + env(safe-area-inset-bottom, 0px));
-}
-
-.app-main:focus {
-	outline: none;
 }
 
 /* ---------- Nav on a phone (OVERRIDE) ----------
@@ -81,13 +74,14 @@
 }
 
 /* ---------- List (OVERRIDE) ----------
-   Pulled out of the container's gutter so a row spans the whole width it is
-   given — the full screen on a phone, the container on a desktop. A row's
-   background is what states its status, and leaving the page colour down
-   both sides would turn that into a stripe instead of a row. */
+   Sized like a .container but without its gutter, so a row spans the full
+   screen on a phone and the container on a desktop. A row's background is
+   what states its status, and leaving the page colour down both sides would
+   turn that into a stripe instead of a row. The rows carry the gutter. */
 
 .list {
-	margin: 0 calc(var(--container-pad) * -1);
+	max-width: var(--container-max);
+	margin-inline: auto;
 	border-top: 0;
 }
 
@@ -244,12 +238,6 @@ button.list__primary {
 	text-decoration: line-through;
 }
 
-/* Rows are <li>, so the brand's hover (a./button.list__row only) never
-   fires; a plain tint would wash the state colour out anyway. Lift it. */
-.list__row[class*='list__row--']:hover {
-	filter: brightness(1.12);
-}
-
 /* ---------- Delete mode (ADDITION) ----------
    The mode asks one question — which of these go — and the state colours
    are only context for it. They fade rather than vanish: a row still says
@@ -287,41 +275,6 @@ button.list__primary {
 	color: var(--error);
 }
 
-/* ---------- Floating add button (ADDITION) ----------
-   The one control worth putting under a thumb. Fixed to the viewport, clear
-   of whatever the device carves out at the bottom. */
-
-.btn--fab {
-	position: fixed;
-	/* Tracks the container's right edge on a wide screen instead of drifting
-	   off to the far corner, and falls back to the plain gutter on anything
-	   narrower than the container. */
-	right: max(var(--container-pad), calc(50vw - var(--container-max) / 2 + var(--container-pad)));
-	bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
-	z-index: var(--z-nav);
-	width: var(--fab-size);
-	height: var(--fab-size);
-	border-radius: var(--radius-round);
-	box-shadow: var(--shadow-sm);
-}
-
-/* .btn--icon paints itself ghost-grey; the FAB is a primary action. */
-.btn--fab.btn--primary {
-	background-color: var(--action);
-	border-color: var(--action);
-	color: var(--ghost-white);
-}
-
-.btn--fab.btn--primary:hover {
-	background-color: var(--action-hover);
-	border-color: var(--action-hover);
-}
-
-.btn--fab svg {
-	width: 1.5rem;
-	height: 1.5rem;
-}
-
 /* ---------- Plain icon button (ADDITION) ----------
    .btn--icon boxes its glyph in a grey outline. The hamburger is a glyph in
    the nav, not a boxed control, so this strips the box and keeps the target. */
@@ -336,37 +289,16 @@ button.list__primary {
 	background-color: var(--bg-raised);
 }
 
-/* ---------- Action bar (ADDITION) ----------
-   Delete mode's replacement for the floating add button: fixed where the
-   thumb is, the count on the left, the two ways out on the right. Same
-   right-edge maths as the FAB so it lines up with the container. */
+/* ---------- Toolbar count (ADDITION) ----------
+   Delete mode's toolbar leads with how many rows are chosen. Set as a label,
+   and it takes the free width so the two buttons stay at the right edge. */
 
-.actionbar {
-	position: fixed;
-	right: max(var(--container-pad), calc(50vw - var(--container-max) / 2 + var(--container-pad)));
-	left: max(var(--container-pad), calc(50vw - var(--container-max) / 2 + var(--container-pad)));
-	bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
-	z-index: var(--z-nav);
-	display: flex;
-	align-items: center;
-	gap: var(--space-3);
-	padding: var(--space-3) var(--space-4);
-	border-radius: var(--radius);
-	background-color: var(--bg-raised);
-	box-shadow: var(--shadow-sm);
-}
-
-.actionbar__count {
+.toolbar__count {
 	flex: 1 1 auto;
 	font-family: var(--font-title);
 	font-size: var(--text-sm);
 	letter-spacing: var(--tracking-label);
 	text-transform: uppercase;
-}
-
-/* The bar's buttons are the brand's, only shorter: the bar is one row high. */
-.actionbar .btn {
-	padding: var(--space-3) var(--space-4);
 }
 
 /* ---------- Menu (ADDITION) ----------

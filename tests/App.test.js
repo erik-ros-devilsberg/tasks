@@ -79,11 +79,11 @@ describe('app shell', () => {
 		expect(wrapper.find('main').exists()).toBe(true);
 	});
 
-	it('offers a skip link pointing at the main region, for keyboard users', () => {
+	it('offers no skip link — the page opens on the content, there is nothing to skip', () => {
 		const wrapper = mountApp();
 
-		expect(wrapper.find('a[href="#main"]').exists()).toBe(true);
-		expect(wrapper.find('main').attributes('id')).toBe('main');
+		expect(wrapper.find('a[href="#main"]').exists()).toBe(false);
+		expect(wrapper.find('main').attributes('tabindex')).toBeUndefined();
 	});
 
 	it('shows the build version in the footer, out of the way of navigation', () => {

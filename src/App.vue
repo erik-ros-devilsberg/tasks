@@ -78,8 +78,6 @@ async function signOut() {
 </script>
 
 <template>
-	<a class="skip-link" href="#main">Skip to content</a>
-
 	<nav class="nav nav--sticky">
 		<div class="nav__inner">
 			<router-link class="nav__brand wordmark" to="/">Tasks</router-link>
@@ -129,7 +127,7 @@ async function signOut() {
 		</p>
 	</div>
 
-	<main id="main" class="app-main" tabindex="-1">
+	<main class="app-main">
 		<router-view />
 	</main>
 

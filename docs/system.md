@@ -267,8 +267,8 @@ losing. Selected rows go grey (`--row-selected`, the brand's `--bg-inset`); the 
 a second mark. Each state class only sets `--row-bg`/`--row-ink` and one rule paints, so the
 fade is one rule rather than five. Ink goes to `--fg` in the mode — Upcoming's dark ink was
 chosen for a solid green and disappears on a faded one.
-The FAB gives way to `.actionbar`
-— count, Cancel, Delete (disabled at zero). Delete asks once for the whole batch through
+The toolbar above the list swaps its New task button for the delete toolbar
+— count, Cancel, Delete (disabled at zero), all in the page flow like the button it replaces. Delete asks once for the whole batch through
 `ConfirmModal`, then `removeMany()`, leaves the mode by replacing the query, and syncs once.
 Escape on the list leaves the mode too, unless the dialog is open, in which case it is the
 dialog's Escape.
@@ -397,8 +397,17 @@ own.** There is no `.task-card`. A test asserts the shared inventory still exist
 losing one silently pushes a view into bespoke CSS. No SFC has a `<style>` block — also
 enforced by a test.
 
-Accessibility floor, enforced or reviewed: a visible focus *ring* (not a background tint), a
-skip-to-content link, semantic landmarks, and `prefers-reduced-motion` honoured.
+Accessibility floor, enforced or reviewed: a visible focus *ring* (not a background tint),
+semantic landmarks, `prefers-reduced-motion` honoured, and screen-reader text wherever it
+carries information a sighted user gets another way — the state word on a row whose state is
+otherwise only a colour, "Selected" in delete mode, `aria-label`s on icon buttons, and the
+`aria-live` selection count. Hidden markup that tells nobody anything is left out: there is no
+skip link (the page opens on the content) and no hidden `<h1>` (the wordmark names the view).
+
+**Layout is plain and in the flow.** Nothing on the list page is fixed to the viewport, and
+nothing is pulled out of its box with a negative margin. Both were tried and both broke on a
+phone: a fixed add button slid off-screen when the address bar or a zoom moved the viewport,
+and a negative-margin bleed let the page scroll sideways.
 
 ### What `app.css` adds on top of the brand
 
@@ -408,10 +417,17 @@ with centred items, because a row is a thumb target; `.tick` replaces the browse
 checkbox with one drawn in `currentColor` (`appearance: none`), so it takes each row's ink
 and keeps the brand's `:focus-visible` ring — still an `<input type="checkbox">` underneath;
 and `.btn--plain` strips `.btn--icon`'s grey outline from the hamburger, which is a glyph
-and not a boxed control. The FAB keeps its fill through `.btn--fab.btn--primary`. Delete
-mode adds `.actionbar` (fixed bottom, same right-edge maths as the FAB) and
-`.list__row.is-selected`, an inset bar in `currentColor` so the mark survives all five row
-backgrounds rather than fighting one of them.
+and not a boxed control. Delete mode adds `.toolbar__count`, the label style for "n selected"
+in the brand `.toolbar`, and `.list__row.is-selected`, an inset bar in `currentColor` so the
+mark survives all five row backgrounds rather than fighting one of them.
+
+Row colours reach the screen edge on a phone and the container edge on a desktop. The list
+view is a `.container` holding the toolbar and messages, followed by the `.list` *outside* it;
+`.list` is sized like a container without its gutter (`max-width: var(--container-max);
+margin-inline: auto`) and each `.list__row` carries `--container-pad` as its own padding, so
+the text still lines up with the page. No media query, no negative margin. There is no hover
+effect on a row: rows are `<li>`, the brand's hover never applied, and a hover on a phone sticks
+after a tap.
 
 **Dev-server caveat:** `app.css` lives in `public/`, which Vite serves as a static file and
 never hot-reloads. After editing it, hard-reload the tab (Ctrl+Shift+R) — a component change
@@ -661,6 +677,18 @@ and edge auto-scroll are follow-ups; the manual Android pass is still owed.
 Two things learnt on the way: `public/app.css` is not hot-reloaded, so a CSS change looks
 broken until a hard reload (recorded under CSS); and refs nested in a plain object returned
 from a composable do not unwrap in a template — `useDragReorder` returns `reactive()`.
+
+### Simplify the List Layout (2026-09-30)
+
+Story 18. On the phone the floating new-task button sometimes vanished and rows drifted
+sideways. Both came from layout tricks: a `position: fixed` FAB and action bar positioned with
+`50vw` maths, and a `.list` pulled out of the container gutter with `calc(var(--container-pad)
+* -1)`. Replaced with in-flow layout: a brand `.toolbar` above the list holds the New task
+button, or in delete mode the count, Cancel and Delete. The row hover filter, the hidden
+`<h1>` and the skip link went too. 543 tests.
+
+Deliberate trade: on a long list the add button is at the top, not under the thumb. The
+360px no-sideways-scroll check was not run by hand before wrapping — confirm on the phone.
 
 ## 2026-09-16 — service worker cache name stamped at build time
 

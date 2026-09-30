@@ -112,7 +112,6 @@ describe('shared class inventory', () => {
 		'.btn--ghost',
 		'.btn--sm',
 		'.btn--icon',
-		'.btn--fab',
 		'.menu',
 		'.menu__panel',
 		'.menu__item',
@@ -141,14 +140,30 @@ describe('shared class inventory', () => {
 });
 
 describe('the list runs edge to edge', () => {
-	it('pulls the list out of the container gutter, so a row is not inset by it', () => {
-		// The row's background is what states its status. Leaving the page colour
-		// showing down both sides turns that into a stripe rather than a row.
-		expect(read('app.css')).toMatch(/\.list\s*\{[^}]*margin:[^;]*calc\(var\(--container-pad\)\s*\*\s*-1\)/);
+	// A row's background is what states its status, so it has to reach the edge:
+	// the screen's on a phone, the container's on a desktop. The list is sized
+	// like a container rather than pulled out of one's gutter with a negative
+	// margin — that trick is what let the page scroll sideways on a phone.
+	const rule = (selector) => {
+		const match = read('app.css').match(new RegExp(`(^|\\n)${selector.replace(/[.]/g, '\\.')}\\s*\\{([^}]*)\\}`));
+		return match ? match[2] : '';
+	};
+
+	it('caps the list at the container width and centres it, with no gutter of its own', () => {
+		expect(rule('.list')).toMatch(/max-width:\s*var\(--container-max\)/);
+		expect(rule('.list')).toMatch(/margin-inline:\s*auto/);
+	});
+
+	it('never widens the list with a negative margin', () => {
+		expect(read('app.css')).not.toMatch(/\*\s*-1\)/);
 	});
 
 	it('keeps a row padded to the container gutter, so the text still lines up', () => {
-		expect(read('app.css')).toMatch(/\.list__row\s*\{[^}]*padding:[^;]*var\(--container-pad\)/);
+		expect(rule('.list__row')).toMatch(/padding:[^;]*var\(--container-pad\)/);
+	});
+
+	it('does not filter a row on hover — on a phone the hover sticks after a tap', () => {
+		expect(read('app.css')).not.toMatch(/filter:/);
 	});
 });
 
@@ -174,17 +189,15 @@ describe('a completed row', () => {
 	});
 });
 
-describe('the add button', () => {
-	it('is pinned to the screen rather than scrolling away up the page', () => {
-		expect(read('app.css')).toMatch(/\.btn--fab\s*\{[^}]*position:\s*fixed/);
+describe('the add button and the delete toolbar', () => {
+	// Pinned controls on a phone vanish when the address bar or a zoom moves the
+	// viewport under them. Everything on the list page stays in the flow.
+	it('has no floating button or pinned action bar left in it', () => {
+		expect(read('app.css')).not.toMatch(/\.btn--fab|--fab-size|\.actionbar/);
 	});
 
-	it('clears whatever the device carves out at the bottom', () => {
-		expect(read('app.css')).toMatch(/\.btn--fab\s*\{[^}]*safe-area-inset-bottom/);
-	});
-
-	it('leaves room under the list so it never covers the last task', () => {
-		expect(read('app.css')).toMatch(/\.app-main\s*\{[^}]*padding-bottom/);
+	it('leaves no room under the list for a button that is no longer there', () => {
+		expect(read('app.css')).not.toMatch(/\.app-main\s*\{[^}]*padding-bottom/);
 	});
 });
 

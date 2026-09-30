@@ -236,7 +236,7 @@ describe('normal mode', () => {
 		const { wrapper } = await mounted(fakeServer([task('1')]));
 
 		expect(wrapper.find('[data-action="delete"]').exists()).toBe(false);
-		expect(wrapper.find('.actionbar').exists()).toBe(false);
+		expect(wrapper.find('[role="toolbar"]').exists()).toBe(false);
 	});
 });
 
@@ -265,12 +265,12 @@ describe('delete mode', () => {
 		expect(wrapper.find('input[type="checkbox"]').attributes('disabled')).toBeUndefined();
 	});
 
-	it('is entered from the route, and swaps the add button for an action bar', async () => {
+	it('is entered from the route, and swaps the add button for the delete toolbar', async () => {
 		const { wrapper } = await inDeleteMode(fakeServer([task('1')]));
 
-		expect(wrapper.find('.actionbar').exists()).toBe(true);
+		expect(wrapper.find('[role="toolbar"]').exists()).toBe(true);
 		expect(wrapper.find('[data-action="new-task"]').exists()).toBe(false);
-		expect(wrapper.find('.actionbar').text()).toContain('0 selected');
+		expect(wrapper.find('[role="toolbar"]').text()).toContain('0 selected');
 		expect(wrapper.find('[data-action="delete-selected"]').attributes('disabled')).toBeDefined();
 	});
 
@@ -283,7 +283,7 @@ describe('delete mode', () => {
 		expect(row.classes()).toContain('is-selected');
 		expect(row.attributes('aria-selected')).toBe('true');
 		expect(row.findAll('.visually-hidden').map((el) => el.text())).toContain('Selected');
-		expect(wrapper.find('.actionbar').text()).toContain('1 selected');
+		expect(wrapper.find('[role="toolbar"]').text()).toContain('1 selected');
 		expect(wrapper.find('[data-action="delete-selected"]').attributes('disabled')).toBeUndefined();
 	});
 
@@ -295,7 +295,7 @@ describe('delete mode', () => {
 		await row.trigger('click');
 
 		expect(row.classes()).not.toContain('is-selected');
-		expect(wrapper.find('.actionbar').text()).toContain('0 selected');
+		expect(wrapper.find('[role="toolbar"]').text()).toContain('0 selected');
 	});
 
 	it('makes the name and the tick inert — a row click only ever selects', async () => {
@@ -337,7 +337,7 @@ describe('delete mode', () => {
 		await rows[0].trigger('click');
 		await rows[1].trigger('click');
 
-		expect(wrapper.find('.actionbar').text()).toContain('2 selected');
+		expect(wrapper.find('[role="toolbar"]').text()).toContain('2 selected');
 	});
 
 	it('asks once for the whole batch before deleting anything', async () => {
@@ -422,14 +422,14 @@ describe('delete mode', () => {
 		route.query = {};
 		await wrapper.vm.$nextTick();
 
-		expect(wrapper.find('.actionbar').exists()).toBe(false);
+		expect(wrapper.find('[role="toolbar"]').exists()).toBe(false);
 		expect(wrapper.find('[data-action="new-task"]').exists()).toBe(true);
 		expect(wrapper.find('.list__row').classes()).not.toContain('is-selected');
 
 		route.query = { mode: 'delete' };
 		await wrapper.vm.$nextTick();
 
-		expect(wrapper.find('.actionbar').text()).toContain('0 selected');
+		expect(wrapper.find('[role="toolbar"]').text()).toContain('0 selected');
 	});
 
 	it('treats a task the server has already lost as deleted rather than reporting a 404', async () => {
@@ -499,16 +499,35 @@ describe('getting to the form', () => {
 		expect(wrapper.find('[data-action="new-task"]').exists()).toBe(true);
 	});
 
-	it('keeps the add control within thumb reach rather than at the top of the page', async () => {
-		const { wrapper } = await mounted();
+	it('puts the add control inline above the list, where it cannot slide off a phone screen', async () => {
+		const { wrapper } = await mounted(fakeServer([task('1')]));
+		const button = wrapper.find('[data-action="new-task"]');
 
-		expect(wrapper.find('[data-action="new-task"]').classes()).toContain('btn--fab');
+		expect(button.classes()).not.toContain('btn--fab');
+		expect(button.element.closest('.toolbar')).not.toBeNull();
+		expect(button.element.compareDocumentPosition(wrapper.find('.list').element))
+			.toBe(Node.DOCUMENT_POSITION_FOLLOWING);
 	});
 
-	it('names the add control even though it is drawn as a plus', async () => {
+	it('names the add control in words', async () => {
 		const { wrapper } = await mounted();
 
-		expect(wrapper.find('[data-action="new-task"]').attributes('aria-label')).toMatch(/new task/i);
+		expect(wrapper.find('[data-action="new-task"]').text()).toMatch(/new task/i);
+	});
+
+	it('puts the delete toolbar above the list too, in the add control\'s place', async () => {
+		const { wrapper } = await inDeleteMode(fakeServer([task('1')]));
+		const bar = wrapper.find('[role="toolbar"]');
+
+		expect(bar.classes()).toContain('toolbar');
+		expect(bar.element.compareDocumentPosition(wrapper.find('.list').element))
+			.toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+	});
+
+	it('carries no hidden page heading — the wordmark already names the view', async () => {
+		const { wrapper } = await mounted();
+
+		expect(wrapper.find('h1').exists()).toBe(false);
 	});
 
 	it('opens a task by its name — there is no separate edit control any more', async () => {

@@ -27,6 +27,8 @@
 	--row-completed: var(--bg-muted);
 	--row-completed-ink: var(--gray-faint);
 	--row-selected: var(--bg-inset);
+	--row-new: var(--bg-raised);
+	--row-new-ink: var(--fg);
 	/* How much of a row's state colour is left in delete mode. */
 	--row-dimmed: 40%;
 	--tick-size: 1.5rem;
@@ -91,6 +93,64 @@
 	align-items: center;
 	gap: var(--space-4);
 	padding: var(--space-4) var(--container-pad);
+}
+
+/* ---------- List head (ADDITION) ----------
+   Holds the add row, or the delete toolbar in its place, and keeps it in
+   view while the list scrolls. Sticky, not fixed: it stays in the flow, so
+   a viewport moving under it on a phone cannot carry it off the screen the
+   way it carried the old floating button. It sits under the nav, which is
+   sticky too. Opaque, because the add row's fill is translucent and the
+   rows scrolling under it must not show through.
+
+   Not the brand's .list__header: that is a small uppercase group label,
+   and everything here is meant to read as a row. */
+
+.list__head {
+	position: sticky;
+	top: var(--nav-height);
+	z-index: var(--z-sticky);
+	max-width: var(--container-max);
+	margin-inline: auto;
+	background-color: var(--bg);
+}
+
+/* The toolbar's own margins would push the list down when delete mode
+   swaps it in, so it takes the row gutter instead. */
+.list__head > .toolbar {
+	margin: 0;
+	padding: var(--space-3) var(--container-pad);
+}
+
+/* ---------- Add row (ADDITION) ----------
+   The empty row at the head of the list: the next task waiting to be
+   written. A row in shape, with a plus where a task has its tick. */
+
+.list__row--new {
+	--row-bg: var(--row-new);
+	--row-ink: var(--row-new-ink);
+}
+
+/* The brand's ring sits outside the element, and this row runs to the
+   edge of a phone screen, so the ring is drawn inside it. */
+.list__row--new:focus-visible {
+	outline-offset: calc(0px - var(--focus-width));
+}
+
+.list__mark {
+	flex: 0 0 auto;
+	width: var(--tick-size);
+	height: var(--tick-size);
+	display: grid;
+	place-content: center;
+}
+
+.list__mark svg {
+	width: var(--tick-size);
+	height: var(--tick-size);
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 2.5;
 }
 
 /* ---------- Selected row (ADDITION) ----------

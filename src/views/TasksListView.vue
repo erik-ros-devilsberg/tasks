@@ -156,33 +156,33 @@ async function destroySelected() {
 <template>
 	<section @keydown.esc="deleteMode && !confirming && leaveDeleteMode()">
 		<!--
-			The toolbar and messages keep the page gutter; the list below does not,
-			so its row colours reach the edge. That split is why the section itself
-			is not the container.
+			Sized like the list, not the container, so the add row's colour reaches
+			the edge the way every row's does. In the flow, not pinned to the
+			screen: a fixed button slid off a phone whenever the address bar or a
+			zoom moved the viewport under it.
 		-->
-		<div class="container">
+		<div class="list__head">
 			<!--
-				In the flow, not pinned to the screen: a fixed button slid off a phone
-				whenever the address bar or a zoom moved the viewport under it.
+				The empty row at the head of the list: it reads as the next task
+				waiting to be written, not as a control bolted on above the list.
 			-->
-			<div v-if="!deleteMode" class="toolbar">
-				<div class="toolbar__actions">
-					<button
-						class="btn btn--primary"
-						type="button"
-						data-action="new-task"
-						@click="router.push('/tasks/new')"
-					>
-						<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-							<path d="M12 5v14M5 12h14" />
-						</svg>
-						New task
-					</button>
-				</div>
-			</div>
+			<button
+				v-if="!deleteMode"
+				class="list__row list__row--new"
+				type="button"
+				data-action="new-task"
+				@click="router.push('/tasks/new')"
+			>
+				<span class="list__mark" aria-hidden="true">
+					<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" focusable="false">
+						<path d="M12 5v14M5 12h14" />
+					</svg>
+				</span>
+				<span class="list__primary">New task</span>
+			</button>
 
 			<!--
-				Takes the add button's place: in delete mode the only thing worth
+				Takes the add row's place: in delete mode the only thing worth
 				doing is finishing or abandoning the selection. One Delete for the
 				whole batch, one confirmation, and the mode is over.
 			-->
@@ -203,7 +203,14 @@ async function destroySelected() {
 					</button>
 				</div>
 			</div>
+		</div>
 
+		<!--
+			The messages keep the page gutter; the list and its head do not, so
+			their row colours reach the edge. That split is why the section itself
+			is not the container.
+		-->
+		<div class="container">
 			<!--
 				Shown alongside the list rather than instead of it: a change the server
 				refused still leaves the rest of the list worth looking at.

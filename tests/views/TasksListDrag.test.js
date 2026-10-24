@@ -56,7 +56,7 @@ const DONE = '2026-08-29T10:00:00.000000Z';
 
 const handles = (wrapper) => wrapper.findAll('[data-action="reorder"]');
 const rowOf = (wrapper, title) =>
-	wrapper.findAll('.list__row').find((row) => row.find('[data-action="open"]').text().includes(title));
+	wrapper.findAll('.list .list__row').find((row) => row.find('[data-action="open"]').text().includes(title));
 
 const move = (clientY) => window.dispatchEvent(new MouseEvent('pointermove', { clientY, clientX: 10 }));
 const release = (clientY) => window.dispatchEvent(new MouseEvent('pointerup', { clientY, clientX: 10 }));

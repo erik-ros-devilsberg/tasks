@@ -124,7 +124,7 @@ describe('one flat list', () => {
 	it('orders soonest due first and undated last, across every state', async () => {
 		const wrapper = await mounted(spread());
 
-		expect(wrapper.findAll('.list__row').map((row) => row.text())).toEqual([
+		expect(wrapper.findAll('.list .list__row').map((row) => row.text())).toEqual([
 			expect.stringContaining('Task overdue'),
 			expect.stringContaining('Task today'),
 			expect.stringContaining('Task upcoming'),
@@ -141,7 +141,7 @@ describe('one flat list', () => {
 			}),
 		);
 
-		expect(wrapper.findAll('.list__row')).toHaveLength(0);
+		expect(wrapper.findAll('.list .list__row')).toHaveLength(0);
 	});
 
 	it('mixes completed tasks into the same list when they are, not into a section', async () => {
@@ -157,7 +157,7 @@ describe('one flat list', () => {
 		await flushPromises();
 
 		expect(wrapper.findAll('[data-section="completed"]')).toHaveLength(0);
-		expect(wrapper.findAll('.list__row').map((row) => row.text())).toEqual([
+		expect(wrapper.findAll('.list .list__row').map((row) => row.text())).toEqual([
 			expect.stringContaining('Task done'),
 			expect.stringContaining('Task open'),
 		]);
@@ -170,12 +170,12 @@ describe('a row', () => {
 	it('shows the task title', async () => {
 		const wrapper = await mounted(one({ title: 'Buy milk' }));
 
-		expect(wrapper.find('.list__primary').text()).toContain('Buy milk');
+		expect(wrapper.find('.list .list__primary').text()).toContain('Buy milk');
 	});
 
 	it('carries a tick box, the name and a drag handle — and nothing else', async () => {
 		const wrapper = await mounted(one({ due_at: '2026-09-05', notes: 'Some notes' }));
-		const row = wrapper.find('.list__row');
+		const row = wrapper.find('.list .list__row');
 
 		expect(row.find('input[type="checkbox"]').exists()).toBe(true);
 		expect(row.find('[data-action="open"]').exists()).toBe(true);
@@ -193,7 +193,7 @@ describe('a row', () => {
 
 	it('shows no due date, no badge and no note indicator — the row is the name', async () => {
 		const wrapper = await mounted(one({ due_at: '2026-09-05', notes: 'Some notes' }));
-		const row = wrapper.find('.list__row');
+		const row = wrapper.find('.list .list__row');
 
 		expect(row.find('.list__secondary').exists()).toBe(false);
 		expect(row.find('.badge').exists()).toBe(false);
@@ -219,7 +219,7 @@ describe('a row', () => {
 describe('the colour a row carries', () => {
 	const one = (over) => fakeRemote({ listAll: vi.fn().mockResolvedValue([task('1', over)]) });
 
-	const rowFor = async (over) => (await mounted(one(over))).find('.list__row');
+	const rowFor = async (over) => (await mounted(one(over))).find('.list .list__row');
 
 	it('marks an overdue task', async () => {
 		expect((await rowFor({ due_at: '2026-08-20' })).classes()).toContain('list__row--overdue');
@@ -244,7 +244,7 @@ describe('the colour a row carries', () => {
 		useTasksStore().completedShown = true;
 		await flushPromises();
 
-		expect(wrapper.find('.list__row').classes()).toContain('list__row--completed');
+		expect(wrapper.find('.list .list__row').classes()).toContain('list__row--completed');
 	});
 
 	it('names the state in text for anyone who cannot see the colour', async () => {
@@ -390,7 +390,7 @@ describe('a task due today', () => {
 			fakeRemote({ listAll: vi.fn().mockResolvedValue([task('1', { due_at: '2026-08-30' })]) }),
 		);
 
-		const row = wrapper.find('.list__row');
+		const row = wrapper.find('.list .list__row');
 
 		expect(row.classes()).toContain('list__row--today');
 		expect(row.text()).not.toMatch(/overdue/i);
@@ -404,7 +404,7 @@ describe('reusing the shared stylesheet', () => {
 		);
 
 		expect(wrapper.find('.list').exists()).toBe(true);
-		expect(wrapper.find('.list__row').exists()).toBe(true);
+		expect(wrapper.find('.list .list__row').exists()).toBe(true);
 		expect(wrapper.find('[class*="task-"]').exists()).toBe(false);
 	});
 });

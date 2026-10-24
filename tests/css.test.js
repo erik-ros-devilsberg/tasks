@@ -201,6 +201,51 @@ describe('the add button and the delete toolbar', () => {
 	});
 });
 
+describe('the head of the list', () => {
+	// Holds the add row, or the delete toolbar in its place. It sticks rather
+	// than being pinned: sticky stays in the flow, so a viewport moving under
+	// it cannot carry it off the screen the way it carried the fixed button.
+	const rule = (selector) => {
+		const match = read('app.css').match(new RegExp(`(^|\\n)${selector.replace(/[.]/g, '\\.')}\\s*\\{([^}]*)\\}`));
+		return match ? match[2] : '';
+	};
+
+	it('sticks under the sticky nav instead of scrolling away with the list', () => {
+		expect(rule('.list__head')).toMatch(/position:\s*sticky/);
+		expect(rule('.list__head')).toMatch(/top:\s*var\(--nav-height\)/);
+		expect(rule('.list__head')).toMatch(/z-index:\s*var\(--z-sticky\)/);
+	});
+
+	it('is never pinned to the viewport', () => {
+		expect(rule('.list__head')).not.toMatch(/position:\s*fixed/);
+	});
+
+	it('runs edge to edge like the list it heads', () => {
+		expect(rule('.list__head')).toMatch(/max-width:\s*var\(--container-max\)/);
+		expect(rule('.list__head')).toMatch(/margin-inline:\s*auto/);
+	});
+
+	it('is opaque, so the rows scrolling under it do not show through', () => {
+		expect(rule('.list__head')).toMatch(/background-color:\s*var\(--bg\)/);
+	});
+
+	it('paints the add row from its own token pair, like every row state', () => {
+		expect(read('app.css')).toMatch(/:root\s*\{[^}]*--row-new:/);
+		expect(read('app.css')).toMatch(/:root\s*\{[^}]*--row-new-ink:/);
+		expect(rule('.list__row--new')).toMatch(/--row-bg:\s*var\(--row-new\)/);
+		expect(rule('.list__row--new')).toMatch(/--row-ink:\s*var\(--row-new-ink\)/);
+	});
+
+	it('draws the add row\'s focus ring inside it, where a phone screen\'s edge cannot cut it off', () => {
+		expect(rule('.list__row--new:focus-visible')).toMatch(/outline-offset:\s*calc\(0px - var\(--focus-width\)\)/);
+	});
+
+	it('gives the delete toolbar the row gutter and no margin, so swapping the two does not shift the list', () => {
+		expect(rule('.list__head > .toolbar')).toMatch(/margin:\s*0/);
+		expect(rule('.list__head > .toolbar')).toMatch(/padding:[^;]*var\(--container-pad\)/);
+	});
+});
+
 describe('the confirm dialog’s buttons', () => {
 	it('does not throw a danger button left when it is the dialog’s go button', () => {
 		// The brand pushes `.btn--danger` to the far left because it assumes danger is a

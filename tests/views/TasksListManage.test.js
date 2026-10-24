@@ -95,7 +95,7 @@ describe('completing a task', () => {
 		await flushPromises();
 
 		expect(remote.complete).toHaveBeenCalledWith('1');
-		expect(wrapper.findAll('.list__row')).toHaveLength(0);
+		expect(wrapper.findAll('.list .list__row')).toHaveLength(0);
 	});
 
 	it('is safe to click twice — the endpoint is idempotent and the row is already gone', async () => {
@@ -181,7 +181,7 @@ describe('completed tasks in the list', () => {
 	it('are hidden until asked for', async () => {
 		const { wrapper } = await mounted(withCompleted());
 
-		expect(wrapper.findAll('.list__row')).toHaveLength(1);
+		expect(wrapper.findAll('.list .list__row')).toHaveLength(1);
 	});
 
 	it('join the one list in the same order as everything else', async () => {
@@ -189,7 +189,7 @@ describe('completed tasks in the list', () => {
 
 		// Ordered by due date like any other row — being done does not move a
 		// task to the bottom of the page.
-		expect(wrapper.findAll('.list__row').map((row) => row.text())).toEqual([
+		expect(wrapper.findAll('.list .list__row').map((row) => row.text())).toEqual([
 			expect.stringContaining('Task old'),
 			expect.stringContaining('Task new'),
 			expect.stringContaining('Task open'),
@@ -198,7 +198,7 @@ describe('completed tasks in the list', () => {
 
 	it('come ticked, and say so without a badge', async () => {
 		const { wrapper } = await mounted(withCompleted(), { completedShown: true });
-		const row = wrapper.findAll('.list__row')[0];
+		const row = wrapper.findAll('.list .list__row')[0];
 
 		expect(row.find('input[type="checkbox"]').element.checked).toBe(true);
 		expect(row.find('.badge').exists()).toBe(false);
@@ -209,14 +209,14 @@ describe('completed tasks in the list', () => {
 		const { wrapper } = await mounted(withCompleted(), { completedShown: true });
 
 		expect(
-			wrapper.findAll('.list__row')[0].find('input[type="checkbox"]').attributes('aria-label'),
+			wrapper.findAll('.list .list__row')[0].find('input[type="checkbox"]').attributes('aria-label'),
 		).toMatch(/reopen/i);
 	});
 
 	it('reopen from the same box that completed them', async () => {
 		const { wrapper, remote } = await mounted(withCompleted(), { completedShown: true });
 
-		await wrapper.findAll('.list__row')[0].find('input[type="checkbox"]').setValue(false);
+		await wrapper.findAll('.list .list__row')[0].find('input[type="checkbox"]').setValue(false);
 		await flushPromises();
 
 		expect(remote.reopen).toHaveBeenCalledWith('old');
@@ -276,7 +276,7 @@ describe('delete mode', () => {
 
 	it('selects a task by clicking anywhere on its row, and says so', async () => {
 		const { wrapper } = await inDeleteMode(fakeServer([task('1')]));
-		const row = wrapper.find('.list__row');
+		const row = wrapper.find('.list .list__row');
 
 		await row.trigger('click');
 
@@ -289,7 +289,7 @@ describe('delete mode', () => {
 
 	it('deselects on a second click', async () => {
 		const { wrapper } = await inDeleteMode(fakeServer([task('1')]));
-		const row = wrapper.find('.list__row');
+		const row = wrapper.find('.list .list__row');
 
 		await row.trigger('click');
 		await row.trigger('click');
@@ -308,7 +308,7 @@ describe('delete mode', () => {
 
 		expect(pushMock).not.toHaveBeenCalled();
 		expect(remote.complete).not.toHaveBeenCalled();
-		expect(wrapper.find('.list__row').classes()).toContain('is-selected');
+		expect(wrapper.find('.list .list__row').classes()).toContain('is-selected');
 	});
 
 	/*
@@ -324,7 +324,7 @@ describe('delete mode', () => {
 		await box.trigger('click');
 
 		expect(box.element.checked).toBe(false);
-		expect(wrapper.find('.list__row').classes()).not.toContain('is-selected');
+		expect(wrapper.find('.list .list__row').classes()).not.toContain('is-selected');
 	});
 
 	it('offers completed tasks for deletion too, when they are shown', async () => {
@@ -333,7 +333,7 @@ describe('delete mode', () => {
 			{ completedShown: true },
 		);
 
-		const rows = wrapper.findAll('.list__row');
+		const rows = wrapper.findAll('.list .list__row');
 		await rows[0].trigger('click');
 		await rows[1].trigger('click');
 
@@ -343,7 +343,7 @@ describe('delete mode', () => {
 	it('asks once for the whole batch before deleting anything', async () => {
 		const remote = fakeServer([task('1'), task('2'), task('3')]);
 		const { wrapper } = await inDeleteMode(remote);
-		const rows = wrapper.findAll('.list__row');
+		const rows = wrapper.findAll('.list .list__row');
 
 		await rows[0].trigger('click');
 		await rows[2].trigger('click');
@@ -357,7 +357,7 @@ describe('delete mode', () => {
 	it('speaks in the singular for one task', async () => {
 		const { wrapper } = await inDeleteMode(fakeServer([task('1')]));
 
-		await wrapper.find('.list__row').trigger('click');
+		await wrapper.find('.list .list__row').trigger('click');
 		await wrapper.find('[data-action="delete-selected"]').trigger('click');
 
 		expect(wrapper.find('.modal').text()).toMatch(/delete 1 task\?/i);
@@ -366,7 +366,7 @@ describe('delete mode', () => {
 	it('deletes every selected task once confirmed, and leaves the mode', async () => {
 		const remote = fakeServer([task('1'), task('2'), task('3')]);
 		const { wrapper } = await inDeleteMode(remote);
-		const rows = wrapper.findAll('.list__row');
+		const rows = wrapper.findAll('.list .list__row');
 
 		await rows[0].trigger('click');
 		await rows[2].trigger('click');
@@ -377,7 +377,7 @@ describe('delete mode', () => {
 		expect(remote.remove).toHaveBeenCalledTimes(2);
 		expect(remote.remove).toHaveBeenCalledWith('1');
 		expect(remote.remove).toHaveBeenCalledWith('3');
-		expect(wrapper.findAll('.list__row')).toHaveLength(1);
+		expect(wrapper.findAll('.list .list__row')).toHaveLength(1);
 		expect(replaceMock).toHaveBeenCalledWith({ query: {} });
 	});
 
@@ -385,21 +385,21 @@ describe('delete mode', () => {
 		const remote = fakeServer([task('1')]);
 		const { wrapper } = await inDeleteMode(remote);
 
-		await wrapper.find('.list__row').trigger('click');
+		await wrapper.find('.list .list__row').trigger('click');
 		await wrapper.find('[data-action="delete-selected"]').trigger('click');
 		await wrapper.find('.modal').trigger('keydown', { key: 'Escape' });
 		await flushPromises();
 
 		expect(remote.remove).not.toHaveBeenCalled();
-		expect(wrapper.findAll('.list__row')).toHaveLength(1);
-		expect(wrapper.find('.list__row').classes()).toContain('is-selected');
+		expect(wrapper.findAll('.list .list__row')).toHaveLength(1);
+		expect(wrapper.find('.list .list__row').classes()).toContain('is-selected');
 	});
 
 	it('cancels the mode itself from the bar, deleting nothing', async () => {
 		const remote = fakeServer([task('1')]);
 		const { wrapper } = await inDeleteMode(remote);
 
-		await wrapper.find('.list__row').trigger('click');
+		await wrapper.find('.list .list__row').trigger('click');
 		await wrapper.find('[data-action="cancel-delete"]').trigger('click');
 
 		expect(remote.remove).not.toHaveBeenCalled();
@@ -409,7 +409,7 @@ describe('delete mode', () => {
 	it('cancels on Escape from the list', async () => {
 		const { wrapper } = await inDeleteMode(fakeServer([task('1')]));
 
-		await wrapper.find('.list__row').trigger('click');
+		await wrapper.find('.list .list__row').trigger('click');
 		await wrapper.trigger('keydown', { key: 'Escape' });
 
 		expect(replaceMock).toHaveBeenCalledWith({ query: {} });
@@ -417,14 +417,14 @@ describe('delete mode', () => {
 
 	it('forgets the selection and brings the add button back once the route leaves the mode', async () => {
 		const { wrapper } = await inDeleteMode(fakeServer([task('1')]));
-		await wrapper.find('.list__row').trigger('click');
+		await wrapper.find('.list .list__row').trigger('click');
 
 		route.query = {};
 		await wrapper.vm.$nextTick();
 
 		expect(wrapper.find('[role="toolbar"]').exists()).toBe(false);
 		expect(wrapper.find('[data-action="new-task"]').exists()).toBe(true);
-		expect(wrapper.find('.list__row').classes()).not.toContain('is-selected');
+		expect(wrapper.find('.list .list__row').classes()).not.toContain('is-selected');
 
 		route.query = { mode: 'delete' };
 		await wrapper.vm.$nextTick();
@@ -440,14 +440,14 @@ describe('delete mode', () => {
 		const realRemove = remote.remove;
 		remote.remove = vi.fn(async (id) => (id === '1' ? failing(404)() : realRemove(id)));
 
-		const rows = wrapper.findAll('.list__row');
+		const rows = wrapper.findAll('.list .list__row');
 		await rows[0].trigger('click');
 		await rows[1].trigger('click');
 		await wrapper.find('[data-action="delete-selected"]').trigger('click');
 		await wrapper.find('[data-action="confirm"]').trigger('click');
 		await flushPromises();
 
-		expect(wrapper.findAll('.list__row')).toHaveLength(0);
+		expect(wrapper.findAll('.list .list__row')).toHaveLength(0);
 		expect(wrapper.find('.error').exists()).toBe(false);
 		expect(remote.remove).toHaveBeenCalledWith('2');
 	});
@@ -457,14 +457,14 @@ describe('delete mode', () => {
 		const { wrapper, store } = await inDeleteMode(remote);
 		unplug(remote);
 
-		const rows = wrapper.findAll('.list__row');
+		const rows = wrapper.findAll('.list .list__row');
 		await rows[0].trigger('click');
 		await rows[1].trigger('click');
 		await wrapper.find('[data-action="delete-selected"]').trigger('click');
 		await wrapper.find('[data-action="confirm"]').trigger('click');
 		await flushPromises();
 
-		expect(wrapper.findAll('.list__row')).toHaveLength(0);
+		expect(wrapper.findAll('.list .list__row')).toHaveLength(0);
 		expect(wrapper.find('.error').exists()).toBe(false);
 		expect(store.pendingCount).toBe(2);
 	});
@@ -477,7 +477,7 @@ describe('delete mode', () => {
 		const { wrapper } = await inDeleteMode(remote, { offline });
 		unplug(remote);
 
-		const rows = wrapper.findAll('.list__row');
+		const rows = wrapper.findAll('.list .list__row');
 		await rows[0].trigger('click');
 		await rows[1].trigger('click');
 		await wrapper.find('[data-action="delete-selected"]').trigger('click');
@@ -504,9 +504,46 @@ describe('getting to the form', () => {
 		const button = wrapper.find('[data-action="new-task"]');
 
 		expect(button.classes()).not.toContain('btn--fab');
-		expect(button.element.closest('.toolbar')).not.toBeNull();
 		expect(button.element.compareDocumentPosition(wrapper.find('.list').element))
 			.toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+	});
+
+	it('shapes the add control as the empty row at the head of the list, not as a button', async () => {
+		const { wrapper } = await mounted(fakeServer([task('1')]));
+		const button = wrapper.find('[data-action="new-task"]');
+
+		expect(button.classes()).toEqual(expect.arrayContaining(['list__row', 'list__row--new']));
+		expect(button.classes().some((name) => name === 'btn' || name.startsWith('btn--'))).toBe(false);
+		expect(button.find('.list__primary').text()).toBe('New task');
+	});
+
+	it('puts a plus where a row has its tick, hidden from screen readers so the name stays "New task"', async () => {
+		const { wrapper } = await mounted();
+		const button = wrapper.find('[data-action="new-task"]');
+		const mark = button.find('.list__mark');
+
+		expect(mark.exists()).toBe(true);
+		expect(mark.element.compareDocumentPosition(button.find('.list__primary').element))
+			.toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+		expect(mark.attributes('aria-hidden')).toBe('true');
+		expect(button.text()).toBe('New task');
+	});
+
+	it('is one native button, so a tap, Enter and Space all reach it and it takes the focus ring', async () => {
+		const { wrapper } = await mounted();
+		const button = wrapper.find('[data-action="new-task"]');
+
+		expect(button.element.tagName).toBe('BUTTON');
+		expect(button.attributes('type')).toBe('button');
+		expect(button.findAll('button, a, input')).toHaveLength(0);
+	});
+
+	it('opens the new-task form through the router', async () => {
+		const { wrapper } = await mounted();
+
+		await wrapper.find('[data-action="new-task"]').trigger('click');
+
+		expect(pushMock).toHaveBeenCalledWith('/tasks/new');
 	});
 
 	it('names the add control in words', async () => {
@@ -522,6 +559,18 @@ describe('getting to the form', () => {
 		expect(bar.classes()).toContain('toolbar');
 		expect(bar.element.compareDocumentPosition(wrapper.find('.list').element))
 			.toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+	});
+
+	it('swaps the add row and the delete toolbar inside the one sticky head, so both stay in view', async () => {
+		const { wrapper } = await mounted(fakeServer([task('1')]));
+
+		expect(wrapper.find('[data-action="new-task"]').element.parentElement.classList).toContain('list__head');
+
+		route.query = { mode: 'delete' };
+		await flushPromises();
+
+		expect(wrapper.find('[role="toolbar"]').element.parentElement.classList).toContain('list__head');
+		expect(wrapper.findAll('.list__head')).toHaveLength(1);
 	});
 
 	it('carries no hidden page heading — the wordmark already names the view', async () => {

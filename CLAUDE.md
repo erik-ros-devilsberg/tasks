@@ -347,68 +347,54 @@ No commit with failing or skipped tests.
 
 ---
 
-## Agile Workflow
+## Workflow — the Memrego hub
 
-This project uses the agile plugin. Follow these rules when building features.
+Requests, stories, sprints and work packages live in the Memrego hub, project `coevta`, reached
+through the `hub` plugin (`hub@memrego`). **The local agile workflow is retired** (2026-10-24):
+nothing new goes into `docs/user-stories/` or `docs/sprints/`, and the `/agile:shape`,
+`/agile:execute` and `/agile:wrap-sprint` commands are not used here. `docs/user-stories/done/`
+stays as the record of the sprints before the switch.
+
+The connection is set in `.env` (`AGILE_AGENTIC_API_URL`, `AGILE_AGENTIC_ACCESS_TOKEN`,
+`AGILE_AGENTIC_PROJECT=coevta`), which is gitignored. Never print or log the token. Run hub
+commands from the repo root. If a hub call fails with exit code 2, 3 or 6, run `hub:setup`.
 
 ### Flow
 
 ```
-1. Human writes user stories to docs/user-stories/backlog/
-2. /agile:shape <story-slug> [<story-slug2> ...]
-        → product-manager reads stories and shapes a sprint plan → saved to docs/sprints/
-        STOP: human reviews and approves plan
-3. /agile:execute docs/sprints/<sprint-slug>.md
-        → developer implements (TDD: tests first, then implement)
-        STOP: human reviews the work
-4. /agile:review (optional, ad-hoc)
-        → reviewer reports findings inline
-        → human fixes defects now or creates new user stories
-5. /agile:wrap-sprint
-        → documents sprint in docs/system.md
-        → moves user stories to docs/user-stories/done/
-        → deletes sprint plan
-6. /agile:commit → commit and push
+1. Requests: bugs and feature requests        → hub:requests
+        anyone files one; the product owner triages it
+2. Stories: written for a request, attached to it → hub:backlog
+        slug NN-kebab-name, title, description, acceptance criteria
+3. Sprint planning: one activity, not two      → hub:backlog + hub:work
+        create the sprint from shaped stories AND split every story into
+        work packages, so the plan put up for approval is complete
+        STOP: the human approves the sprint in the dashboard
+4. Work packages: claimed, done                → hub:work
+        developer implements (TDD: tests first, then implement)
+        STOP: the human verifies and sends the sprint to review
+5. Acceptance: the product owner accepts each story against the Definition of Done
+        and closes the sprint in the dashboard
+6. Commit only when the human asks
 ```
 
 ### Rules
 
-- Never start building without an approved sprint plan in `docs/sprints/`
-- Sprint plans are the single source of truth for the sprint — update them as execution progresses
-- Developer writes tests first, then implements — never skip writing tests
-- Tests live in a seperate directory structure in the project root /tests
-- Review is user invoked — trigger it with `/agile:review`
-- Defects found in review become new user stories
-- Do not make changes outside project directory
-
-### Directory structure
-
-- `docs/user-stories/backlog/` — pending user stories (human-written)
-- `docs/user-stories/done/` — completed user stories (moved here by `/agile:wrap-sprint`)
-- `docs/sprints/` — active sprint plans (deleted after `/agile:wrap-sprint`)
-- `docs/system.md` — cumulative decisions and outcomes
-
-### User story format
-
-File naming: `NN-story-name.md` — use a two-digit number prefix to control ordering (e.g. `01-user-authentication.md`, `02-password-reset.md`).
-
-```markdown
----
-story: <Story Name>
-created: YYYY-MM-DD
----
-
-## Description
-
-<What needs to be built and why>
-
-## Acceptance Criteria
-
-- <criterion 1 — specific and testable>
-- <criterion 2>
-```
+- Never start building without an approved, running sprint in the hub.
+- Triage (attach, detach, decline, reopen a request) is the product owner's call: propose it,
+  do it only when asked.
+- A story written for a request is attached to that request (`submissions attach`).
+- An agent never sets a story or sprint to `done`, never starts a sprint, and never moves a sprint
+  into or out of `review` while `whoami` reports `human_sends_to_review: true`. Report the work as
+  finished and stop.
+- Developer writes tests first, then implements — never skip writing tests.
+- Tests live in a separate directory structure in the project root `/tests`.
+- Defects found in review become new requests in the hub.
+- Decisions and outcomes worth keeping still go into `docs/system.md`.
+- Do not make changes outside the project directory.
 
 ### Human gates
 
-1. After `/agile:shape` — approve the sprint plan before executing
-2. After `/agile:execute` — review the work and decide whether to run `/agile:review`
+1. Approving a sprint — in the hub dashboard, before any work starts.
+2. Reviewing the work — a human verifies it and sends the sprint to review.
+3. Accepting stories and closing the sprint — the product owner, in the dashboard.
